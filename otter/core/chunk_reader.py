@@ -45,7 +45,7 @@ class DBChunkReader:
     """Read chunks from a database"""
 
     def __init__(
-        self, attributes, seek_events: SeekEventsCallback, con: sqlite3.Connection, bufsize: int = 100
+        self, attributes, seek_events: SeekEventsCallback, con: db.Connection, bufsize: int = 100
     ) -> None:
         self.con = con
         self.bufsize = bufsize

@@ -103,7 +103,7 @@ class UnpackTraceProject(Project):
             log.info("creating views")
             con.executescript(db.scripts.create_views)
 
-    def process_trace(self, con: sqlite3.Connection):
+    def process_trace(self, con: otter.db.Connection):
         """Read a trace and create a database of tasks and their synchronisation constraints"""
 
         chunk_builder = DBChunkBuilder(con, bufsize=5000)
