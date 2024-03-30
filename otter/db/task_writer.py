@@ -51,6 +51,9 @@ class DBTaskActionWriter:
         self._task_actions_unique = BufferedDBWriter(
             con, "task_history_unique", 4, bufsize=bufsize, overwrite=overwrite
         )
+        self._task_suspend_meta = BufferedDBWriter(
+            con, "task_suspend_meta", 3, bufsize=bufsize, overwrite=overwrite
+        )
 
     def add_task_action(
         self,
@@ -63,6 +66,12 @@ class DBTaskActionWriter:
         writer = self._task_actions_unique if unique else self._task_actions
         writer.insert(task, action, time, self._source_location_id[location])
 
+    def add_task_suspend_meta(
+        self, task: int, time: str, sync_descendants: bool
+    ) -> None:
+        self._task_suspend_meta.insert(task, time, int(sync_descendants))
+
     def close(self):
         self._task_actions.close()
         self._task_actions_unique.close()
+        self._task_suspend_meta.close()

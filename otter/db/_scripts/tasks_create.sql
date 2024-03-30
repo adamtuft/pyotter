@@ -44,6 +44,15 @@ create table task_history_multi(
     foreign key (id) references task (id)
 );
 
+-- List metadata about each task-suspend action
+create table task_suspend_meta(
+    id int not null,       -- task ID
+    time not null,         -- time of action
+    sync_descendants int not null,
+    primary key (id, time)
+    foreign key (id) references task (id)
+);
+
 -- List parent-child links
 create table task_relation(
     parent_id int not null,

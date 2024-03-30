@@ -19,6 +19,7 @@ from otter.definitions import (
     SourceLocation,
     TaskMetaCallback,
     TaskActionCallback,
+    TaskSuspendMetaCallback,
 )
 
 from .event_model import (
@@ -188,12 +189,14 @@ class TaskGraphEventModel(BaseEventModel):
         chunk_builder: ChunkBuilderProtocol,
         add_task_metadata_cbk: TaskMetaCallback,
         add_task_action_cbk: TaskActionCallback,
+        add_task_suspend_meta_cbk: TaskSuspendMetaCallback,
     ):
         return super().generate_chunks(
             self._filter_with_callbacks(events_iter),
             chunk_builder,
             add_task_metadata_cbk,
             add_task_action_cbk,
+            add_task_suspend_meta_cbk,
         )
 
 

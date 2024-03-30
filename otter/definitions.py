@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import InitVar, asdict, dataclass, field
 from enum import Enum
-from typing import NamedTuple, Protocol, Optional
+from typing import Any, NamedTuple, Protocol, Optional
 
 
 class Attr(str, Enum):
@@ -224,3 +224,9 @@ class TaskActionCallback(Protocol):
         location: SourceLocation,
         unique: bool = False,
     ) -> None: ...
+
+
+class TaskSuspendMetaCallback(Protocol):
+    """Callback used to dispatch metadata about task-suspend actions"""
+
+    def __call__(self, task: int, time: str, sync_descendants: bool) -> None: ...

@@ -165,6 +165,7 @@ class UnpackTraceProject(Project):
                     chunk_builder,
                     task_meta_writer.add_task_metadata,
                     task_action_writer.add_task_action,
+                    task_action_writer.add_task_suspend_meta
                 )
 
             log.info("generated %d chunks", num_chunks)

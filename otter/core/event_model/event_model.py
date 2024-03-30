@@ -31,6 +31,7 @@ from otter.definitions import (
     TaskSyncType,
     TaskMetaCallback,
     TaskActionCallback,
+    TaskSuspendMetaCallback,
 )
 from otter.utils.typing import Decorator
 
@@ -173,6 +174,7 @@ class BaseEventModel(ABC):
         chunk_builder: ChunkBuilderProtocol,
         add_task_metadata_cbk: TaskMetaCallback,
         add_task_action_cbk: TaskActionCallback,
+        add_task_suspend_meta_cbk: TaskSuspendMetaCallback,
     ) -> int:
         otter.log.debug("receiving events from %s", events_iter)
 
@@ -237,6 +239,11 @@ class BaseEventModel(ABC):
                     TaskAction.SUSPEND,
                     str(event.time),
                     self.get_source_location(event),
+                )
+                add_task_suspend_meta_cbk(
+                    event.encountering_task_id,
+                    str(event.time),
+                    bool(event.sync_descendant_tasks == TaskSyncType.descendants),
                 )
             elif self.is_task_resume_event(event):
                 add_task_action_cbk(
