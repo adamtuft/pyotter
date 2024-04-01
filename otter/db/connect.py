@@ -53,26 +53,24 @@ class Connection(sqlite3.Connection):
 
         row_format = "{0:<8s} {1:27s} {2:>6d}"
 
-        otter.log.info("try to read from sqlite_schema")
+        otter.log.debug("try to read from sqlite_schema")
+        query = "select name, type from {table} where type in ('table', 'view') order by type, name"
+        rows: List[Tuple[str, str]]
         try:
-            rows = self.execute(
-                "select name, type from sqlite_schema where type in ('table', 'view') order by type, name"
-            ).fetchall()
+            rows = self.execute(query.format(table="sqlite_schema")).fetchall()
         except sqlite3.OperationalError as err:
-            otter.log.info(err)
-            otter.log.info("failed to read from sqlite_schema, try from sqlite_master")
-            rows = self.execute(
-                "select name, type from sqlite_master where type in ('table', 'view') order by type, name"
-            ).fetchall()
+            otter.log.debug(err)
+            otter.log.debug("failed to read from sqlite_schema, try from sqlite_master")
+            rows = self.execute(query.format(table="sqlite_master")).fetchall()
 
         header = "Type     Name                          Rows"
         print(header)
         print("-" * len(header))
-        for row in rows:
-            query_count_rows = f"select count(*) as rows from {row['name']}"
+        for name, table_or_view in rows:
+            query_count_rows = f"select count(*) from {name}"
             otter.log.debug(query_count_rows)
-            count = self.execute(query_count_rows).fetchone()
-            print(row_format.format(row["type"], row["name"], count["rows"]))
+            (count,) = self.execute(query_count_rows).fetchone()
+            print(row_format.format(table_or_view, name, count))
 
     def num_tasks(self) -> int:
         cur = self.cursor()
