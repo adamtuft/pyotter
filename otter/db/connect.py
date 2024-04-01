@@ -12,12 +12,14 @@ from typing import (
 )
 
 import otter.log
-from ..definitions import (
+
+from .types import (
     SourceLocation,
     TaskDescriptor,
     TaskAttributes,
     TaskSchedulingState,
 )
+
 from . import scripts
 
 

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from ..definitions import SourceLocation
+from otter.db.types import SourceLocation
 
 
 @dataclass

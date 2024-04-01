@@ -4,6 +4,14 @@ from typing import Optional, Set, Tuple
 
 import otter.log
 
+from otter.db.protocols import (
+    TaskMetaCallback,
+    TaskActionCallback,
+    TaskSuspendMetaCallback,
+)
+
+from otter.db.types import SourceLocation
+
 from otter.core.chunk_builder import (
     ChunkBuilderProtocol,
     ChunkKeyNotFoundError,
@@ -16,10 +24,6 @@ from otter.definitions import (
     EventModel,
     EventType,
     NullTaskID,
-    SourceLocation,
-    TaskMetaCallback,
-    TaskActionCallback,
-    TaskSuspendMetaCallback,
 )
 
 from .event_model import (

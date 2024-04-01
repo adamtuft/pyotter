@@ -13,6 +13,9 @@ import otter.log as log
 import otter.db
 import otter.simulator
 
+from otter.definitions import TaskAction, TraceAttr
+from otter.db.types import SourceLocation, TaskDescriptor
+
 from . import db, reporting
 from .core import Chunk, DBChunkBuilder
 from .core.event_model.event_model import (
@@ -21,7 +24,6 @@ from .core.event_model.event_model import (
     get_event_model,
 )
 from .core.events import Event, Location
-from .definitions import SourceLocation, TaskDescriptor, TraceAttr, TaskAction
 from .utils import CountingDict, LabellingDict
 
 

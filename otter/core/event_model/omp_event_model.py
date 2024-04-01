@@ -5,6 +5,7 @@ import otter.log
 from collections import defaultdict
 from typing import Any, Callable, Deque, Dict, List, Optional, Tuple
 
+from otter.db.types import SourceLocation
 from otter.core.chunks import Chunk, ChunkDict
 from otter.core.events import Event, Location
 from otter.core.tasks import Task
@@ -12,7 +13,6 @@ from otter.definitions import (
     EventModel,
     EventType,
     RegionType,
-    SourceLocation,
     TaskStatus,
 )
 

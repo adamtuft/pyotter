@@ -15,6 +15,15 @@ from typing import (
 
 import otter.log
 import otter
+
+from otter.db.protocols import (
+    TaskMetaCallback,
+    TaskActionCallback,
+    TaskSuspendMetaCallback,
+)
+
+from otter.db.types import SourceLocation
+
 from otter.core.chunk_builder import ChunkBuilderProtocol
 from otter.core.chunks import Chunk
 from otter.core.events import Event, Location
@@ -24,12 +33,8 @@ from otter.definitions import (
     EventType,
     NullTaskID,
     RegionType,
-    SourceLocation,
     TaskAction,
     TaskSyncType,
-    TaskMetaCallback,
-    TaskActionCallback,
-    TaskSuspendMetaCallback,
 )
 from otter.utils.typing import Decorator
 

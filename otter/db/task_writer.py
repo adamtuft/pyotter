@@ -1,7 +1,8 @@
 from typing import Dict, Optional
 
-from otter.definitions import SourceLocation, TaskAction
+from otter.definitions import TaskAction
 
+from .types import SourceLocation
 from .connect import Connection
 from .buffered_writers import BufferedDBWriter
 
