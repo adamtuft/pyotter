@@ -14,6 +14,12 @@ import otter.db
 import otter.simulator
 
 from otter.definitions import TaskAction, TraceAttr
+from otter.db import (
+    DBTaskMetaWriter,
+    DBTaskActionWriter,
+    DBSourceLocationWriter,
+    DBStringDefinitionWriter,
+)
 from otter.db.types import SourceLocation, TaskDescriptor
 
 from . import db, reporting
@@ -108,8 +114,19 @@ class UnpackTraceProject(Project):
         log.info("processing trace")
 
         chunk_builder = DBChunkBuilder(con, bufsize=5000)
-        task_meta_writer = otter.db.DBTaskMetaWriter(con, self.string_id)
-        task_action_writer = otter.db.DBTaskActionWriter(con, self.source_location_id)
+        task_meta_writer = DBTaskMetaWriter(con, self.string_id)
+        task_action_writer = DBTaskActionWriter(con, self.source_location_id)
+
+        # Write definitions to the database
+        source_writer = DBSourceLocationWriter(
+            con, self.string_id, self.source_location_id
+        )
+        string_writer = DBStringDefinitionWriter(con, self.string_id)
+
+        # Defer writing these definitions until the connection is closed so that
+        # everything to be defined has had an ID generated
+        con.on_close(source_writer.close)
+        con.on_close(string_writer.close)
 
         # Build the chunks & tasks data
         with ExitStack() as stack:
@@ -170,26 +187,6 @@ class UnpackTraceProject(Project):
                 )
 
             log.info("generated %d chunks", num_chunks)
-
-        # Finally, write the definitions of the source locations and then the strings
-        log.info("writing trace definitions")
-
-        # TODO: consider refactoring into separate buffered writers in otter.db
-        source_location_definitions = (
-            (
-                locid,
-                self.string_id[location.file],
-                self.string_id[location.func],
-                location.line,
-            )
-            for (location, locid) in self.source_location_id.items()
-        )
-        con.executemany(db.scripts.define_source_locations, source_location_definitions)
-
-        string_definitions = (
-            (string_key, string) for (string, string_key) in self.string_id.items()
-        )
-        con.executemany(db.scripts.define_strings, string_definitions)
 
         con.commit()
 
