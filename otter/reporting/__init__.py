@@ -2,9 +2,11 @@ import os
 import subprocess as sp
 import itertools
 from collections import defaultdict
-from typing import Literal, Optional, Tuple
+from typing import Literal, Optional, Tuple, List
 
 from igraph import Graph
+
+import otter.log
 
 from .make import graphviz_record_table
 
@@ -70,8 +72,26 @@ def as_html_table(content: dict, table_attr: Optional[dict] = None) -> str:
     return f"<{label_body}>"
 
 
-def write_graph_to_file(graph: Graph, filename: str = "graph.dot") -> None:
+def write_graph_to_file(
+    graph: Graph, filename: str = "graph.dot", drop: Optional[List[str]] = None
+) -> None:
     """Write a graph to a .dot file, fixing escaped characters in html-like labels"""
+
+    if drop is not None:
+        for name in drop:
+            otter.log.debug("drop vertex attribute: %s", name)
+            try:
+                del graph.vs[name]
+            except KeyError:
+                pass
+
+    if otter.log.is_debug_enabled():
+        otter.log.debug("graph vertex attributes:")
+        for attribute in graph.vs.attributes():
+            types = ", ".join({type(value).__name__ for value in graph.vs[attribute]})
+            otter.log.debug(f"  {attribute:<8s} (type: {types})")
+
+    otter.log.debug("write graph to dotfile: %s", filename)
 
     graph.write_dot(filename)
     with open(filename, mode="r", encoding="utf-8") as df:
