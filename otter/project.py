@@ -1,13 +1,9 @@
 from __future__ import annotations
 
-# TODO: sqlite3 should be internal to otter.db
-import json
 import os
-import sqlite3
 import sys
 from collections import defaultdict
 from contextlib import ExitStack, closing
-from itertools import count
 from typing import Any, AnyStr, Dict, List, Set
 
 import igraph as ig
@@ -18,14 +14,14 @@ import otter.db
 import otter.simulator
 
 from . import db, reporting
-from .core import Chunk, DBChunkBuilder, DBChunkReader
+from .core import Chunk, DBChunkBuilder
 from .core.event_model.event_model import (
     EventModel,
     TraceEventIterable,
     get_event_model,
 )
 from .core.events import Event, Location
-from .definitions import Attr, SourceLocation, TaskAttributes, TraceAttr
+from .definitions import SourceLocation, TaskDescriptor, TraceAttr, TaskAction
 from .utils import CountingDict, LabellingDict
 
 
@@ -97,20 +93,23 @@ class UnpackTraceProject(Project):
             os.remove(self.tasks_db)
         else:
             log.info("creating tasks database %s", self.tasks_db)
-        with closing(sqlite3.connect(self.tasks_db)) as con:
-            log.info("creating databases")
+        with self.connection() as con:
+            log.info(" -- create tables")
             con.executescript(db.scripts.create_tasks)
-            log.info("creating views")
+            log.info(" -- create views")
             con.executescript(db.scripts.create_views)
+        log.info("created database %s", self.tasks_db)
 
     def process_trace(self, con: otter.db.Connection):
-        """Read a trace and create a database of tasks and their synchronisation constraints"""
+        """Read a trace and create a database of tasks"""
+
+        log.info("processing trace")
 
         chunk_builder = DBChunkBuilder(con, bufsize=5000)
         task_meta_writer = otter.db.DBTaskMetaWriter(con, self.string_id)
         task_action_writer = otter.db.DBTaskActionWriter(con, self.source_location_id)
 
-        # First, build the chunks & tasks data
+        # Build the chunks & tasks data
         with ExitStack() as stack:
             reader = stack.enter_context(otf2_ext.open_trace(self.anchorfile))
 
@@ -165,48 +164,15 @@ class UnpackTraceProject(Project):
                     chunk_builder,
                     task_meta_writer.add_task_metadata,
                     task_action_writer.add_task_action,
-                    task_action_writer.add_task_suspend_meta
+                    task_action_writer.add_task_suspend_meta,
                 )
 
             log.info("generated %d chunks", num_chunks)
 
-        # Second, iterate over the chunks to extract synchronisation metadata
-        # TODO: consider removing this 2nd loop entirely as it should be possible to read this data on-the-fly from the trace
-        log.info("generating task synchronisation metadata")
-        with ExitStack() as stack:
-            reader = stack.enter_context(otf2_ext.open_trace(self.anchorfile))
-            seek_events = stack.enter_context(reader.seek_events())
-            chunk_reader = DBChunkReader(reader.attributes, seek_events, con)
-            context_id = count()
-
-            for chunk in chunk_reader.chunks:
-                assert chunk.first is not None
-                try:
-                    assert self.event_model.is_chunk_start_event(chunk.first)
-                except AssertionError as e:
-                    log.error("expected a task-register event")
-                    log.error("event: %s", chunk.first)
-                    log.error("chunk: %s", chunk)
-                    raise e
-                # Get the ID of the task which this chunk represents
-                chunk_task_id = self.event_model.get_task_entered(chunk.first)
-                contexts = self.event_model.contexts_of(chunk)
-                context_ids = []
-                synchronised_tasks = []
-                context_meta = []
-                #! NOTE: task-graph event model now uses sync start time as the sync time
-                for order, (sync_descendants, task_ids, sync_ts) in enumerate(contexts):
-                    cid = next(context_id)
-                    synchronised_tasks.extend((cid, task) for task in task_ids)
-                    context_ids.append((chunk_task_id, cid, order))
-                    context_meta.append((cid, int(sync_descendants), str(sync_ts)))
-                con.executemany(db.scripts.insert_synchronisation, synchronised_tasks)
-                con.executemany(db.scripts.insert_chunk, context_ids)
-                con.executemany(db.scripts.insert_context, context_meta)
-
-            con.commit()
-
         # Finally, write the definitions of the source locations and then the strings
+        log.info("writing trace definitions")
+
+        # TODO: consider refactoring into separate buffered writers in otter.db
         source_location_definitions = (
             (
                 locid,
@@ -235,90 +201,161 @@ class BuildGraphFromDB(Project):
             log.error("no such file: %s", self.tasks_db)
             raise SystemExit(1)
 
-    def build_control_flow_graph_simplified(
-        self, con: db.Connection, task: int, keys: list[str], debug: bool = False
+    def build_control_flow_graph(
+        self, con: db.Connection, task: int, debug: bool, simple: bool = False
     ) -> ig.Graph:
-        """Build a task's simplified control-flow graph"""
+        """Build a task's control-flow-graph"""
 
         def debug_msg(msg, *args) -> None:
-            log.debug("[build_control_flow_graph_simplified] " + msg, *args)
-
-        if debug:
-            debug_msg("keys: %s", keys)
+            log.debug("[build_control_flow_graph] " + msg, *args)
 
         graph = ig.Graph(directed=True)
 
-        (parent_attr_row,) = con.attributes_of((task,))
-        parent_attr = parent_attr_row.as_dict()
-        debug_msg("parent_attr=%s", parent_attr)
+        (parent_attr,) = con.task_attributes((task,))
+        task_descriptor = parent_attr.descriptor
 
         # create head & tail vertices
         head = graph.add_vertex(
             shape="plain",
             style="filled",
-            type="task",
-            attr=task,
+            attr={
+                "id": parent_attr.id,
+                "label": task_descriptor.label,
+                "created": task_descriptor.init_location,
+                "start": task_descriptor.start_location,
+                "children": parent_attr.children,
+            },
         )
         tail = graph.add_vertex(
             shape="plain",
             style="filled",
-            type="task",
-            attr=task,
+            attr={
+                "id": parent_attr.id,
+                "label": task_descriptor.label,
+                "end": task_descriptor.end_location,
+            },
         )
         cur = head
 
-        # for each group of tasks synchronised at a barrier
-        for sequence, rows in con.sync_groups(task, debug=debug):
-            if debug:
-                debug_msg("sequence %s has %d tasks", sequence, len(rows))
+        task_states = con.task_scheduling_states((task,))
+        task_suspend_meta = dict(con.task_suspend_meta(task))
 
-            # get the attributes for all tasks in this sequence
-            task_attribute_rows = con.attributes_of(row["child_id"] for row in rows)
-            if debug:
-                debug_msg("got task attributes:")
-                for row in task_attribute_rows:
-                    debug_msg("%s", row)
+        for state in task_states:
+            actions = state.action_start, state.action_end
 
-            # each sequence is terminated by a barrier vertex
-            barrier_vertex = None
-            if sequence is not None:
+            if state.action_start in (TaskAction.CREATE, TaskAction.SUSPEND):
+                # log.debug("ignore inactive states")
+                continue
+
+            debug_msg(f"{actions=}")
+
+            tasks_created = con.children_created_between(
+                task, state.start_ts, state.end_ts
+            )
+            if simple:
+                child_vertices = [
+                    graph.add_vertex(
+                        attr={
+                            "tasks created": len(tasks_created),
+                            "start": f"{state.file_name_start}:{state.line_start}",
+                            "end": f"{state.file_name_end}:{state.line_end}",
+                        },
+                        shape="plain",
+                        style="filled",
+                        color="yellow",
+                    )
+                ]
+            else:
+                children = con.task_attributes([child for child, _ in tasks_created])
+                child_vertices = [
+                    graph.add_vertex(
+                        shape="plain",
+                        style="filled",
+                        attr={
+                            "id": child.id,
+                            "label": child.descriptor.label,
+                            "created": child.descriptor.init_location,
+                            "children": child.children,
+                        },
+                    )
+                    for child in children
+                ]
+
+            if actions == (TaskAction.START, TaskAction.END):
+                debug_msg("task completed in 1 go")
+
+                if child_vertices:
+                    for v in child_vertices:
+                        graph.add_edge(cur, v)
+                        graph.add_edge(v, tail)
+                else:
+                    graph.add_edge(cur, tail)
+
+            elif actions == (TaskAction.START, TaskAction.SUSPEND):
+                debug_msg("task interrupted at barrier")
+
                 barrier_vertex = graph.add_vertex(
-                    shape="octagon", style="filled", color="red", type="barrier"
+                    shape="octagon",
+                    style="filled",
+                    color="red",
+                    type="barrier",
+                    attr={
+                        "sync descendants": str(task_suspend_meta[state.end_ts]),
+                        "started": f"{state.file_name_end}:{state.line_end}",
+                        "ended": "?:?",
+                    },
+                )
+
+                if child_vertices:
+                    for v in child_vertices:
+                        graph.add_edge(cur, v)
+                        graph.add_edge(v, barrier_vertex)
+                else:
+                    graph.add_edge(cur, barrier_vertex)
+
+                cur = barrier_vertex
+
+            elif actions == (TaskAction.RESUME, TaskAction.END):
+                debug_msg("task completed after barrier")
+
+                cur["attr"]["ended"] = f"{state.file_name_start}:{state.line_start}"
+
+                if child_vertices:
+                    for v in child_vertices:
+                        graph.add_edge(cur, v)
+                        graph.add_edge(v, tail)
+                else:
+                    graph.add_edge(cur, tail)
+
+            elif actions == (TaskAction.RESUME, TaskAction.SUSPEND):
+                debug_msg("task resumed after barrier")
+
+                cur["attr"]["ended"] = f"{state.file_name_start}:{state.line_start}"
+
+                barrier_vertex = graph.add_vertex(
+                    shape="octagon",
+                    style="filled",
+                    color="red",
+                    type="barrier",
+                    attr={
+                        "sync descendants": str(task_suspend_meta[state.end_ts]),
+                        "started": f"{state.file_name_end}:{state.line_end}",
+                        "ended": "?:?",
+                    },
                 )
                 graph.add_edge(cur, barrier_vertex)
 
-            # create a vertex for each sub-group of tasks in this sequence
-            group_vertices = {}
-            for attr, row in zip(task_attribute_rows, rows, strict=True):
-                group_attr = tuple(
-                    (key, attr[key]) for key in keys if key in attr.keys()
-                )
-                if group_attr not in group_vertices:
-                    group_vertex = graph.add_vertex(
-                        shape="plain",
-                        style="filled",
-                        type="group",
-                        attr=dict(group_attr),
-                        tasks={attr["id"]},
-                    )
-                    group_vertices[group_attr] = group_vertex
-                    graph.add_edge(cur, group_vertex)
-                    if barrier_vertex:
-                        graph.add_edge(group_vertex, barrier_vertex)
-                    else:
-                        graph.add_edge(group_vertex, tail)
+                if child_vertices:
+                    for v in child_vertices:
+                        graph.add_edge(cur, v)
+                        graph.add_edge(v, barrier_vertex)
                 else:
-                    group_vertices[group_attr]["tasks"].add(attr["id"])
+                    graph.add_edge(cur, barrier_vertex)
 
-            for group_vertex in group_vertices.values():
-                group_vertex["attr"]["tasks"] = len(group_vertex["tasks"])
-
-            # update for next sequence
-            if barrier_vertex:
                 cur = barrier_vertex
 
-        # complete the graph
-        graph.add_edge(cur, tail)
+            else:
+                log.error(f"unhandled: {actions=}")
 
         if debug:
             debug_msg("created %d vertices:", len(graph.vs))
@@ -327,65 +364,18 @@ class BuildGraphFromDB(Project):
 
         return graph
 
-    def build_control_flow_graph(
-        self, con: db.Connection, task: int, debug: bool
-    ) -> ig.Graph:
-        """Build a task's control-flow-graph"""
-
-        graph = ig.Graph(directed=True)
-
-        # create head & tail vertices
-        head = graph.add_vertex(shape="plain", style="filled", attr=task)
-        tail = graph.add_vertex(shape="plain", style="filled", attr=task)
-        cur = head
-
-        # for each group of tasks synchronised at a barrier
-        for sequence, rows in con.sync_groups(task, debug=debug):
-            if log.is_enabled(log.DEBUG):
-                log.debug("sequence %s has %d tasks", sequence, len(rows))
-
-            # each sequence is terminated by a barrier vertex
-            barrier_vertex = None
-            if sequence is not None:
-                barrier_vertex = graph.add_vertex(
-                    shape="octagon", style="filled", color="red", type="barrier"
-                )
-                graph.add_edge(cur, barrier_vertex)
-
-            # add vertices for the tasks synchronised at this barrier
-            for row in rows:
-                log.debug("  %s", row)
-                task_id = row["child_id"]
-                task_vertex = graph.add_vertex(
-                    shape="plain", style="filled", attr=task_id, type="task"
-                )
-                graph.add_edge(cur, task_vertex)
-                if barrier_vertex:
-                    graph.add_edge(task_vertex, barrier_vertex)
-                else:
-                    graph.add_edge(task_vertex, tail)
-
-            # update for next sequence
-            if barrier_vertex:
-                cur = barrier_vertex
-
-        # complete the graph
-        graph.add_edge(cur, tail)
-        return graph
-
     @staticmethod
     def style_graph(
         con: db.Connection,
         graph: ig.Graph,
         label_data: List[Any],
-        key: str = "attr",
         debug: bool = False,
     ) -> ig.Graph:
         # TODO: could be significantly simpler, all this does is loop over vertices and assign labels (and sometiems colours). Doesn't need to be a member function
-        """Apply styling to a graph, using the vertex attribute "key" to get
-        label data.
+        """Apply styling to the vertices of a graph, using the label data in
+        `label_data`.
 
-        If vertex[key] is:
+        If label_data entry:
 
         - None: leave the label blank
         - int: interpret as a task ID and use the attributes of that task as the label data.
@@ -409,26 +399,31 @@ class BuildGraphFromDB(Project):
         # For vertices where the key is int, assume it indicates a task and get
         # all such tasks' attributes
         task_id_labels = [x for x in label_data if isinstance(x, int)]
-        task_attributes = dict(
-            (task_id, attributes)
-            for task_id, *_, attributes in con.task_attributes(task_id_labels)
-        )
+        task_attributes = {
+            attr.id: attr for attr in con.task_attributes(task_id_labels)
+        }
         for label_item, vertex in zip(label_data, graph.vs):
             if label_item is None:
                 vertex["label"] = ""
             elif isinstance(label_item, int):
-                data = {"id": label_item}  # have id as the first item in the dict
-                data.update(task_attributes[label_item].asdict())
-                r, g, b = (int(x * 256) for x in colour[data["label"]])
+                # Interpret as a task ID and use the task's attributes as the label data
+                attributes = task_attributes[label_item]
+                # Have id as the first item in the dict
+                data: dict[str, Any] = {"id": attributes.id}
+                data.update(attributes.descriptor.asdict())
                 vertex["label"] = reporting.as_html_table(data)
+                r, g, b = (int(x * 256) for x in colour[data["label"]])
                 vertex["color"] = f"#{r:02x}{g:02x}{b:02x}"
             elif isinstance(label_item, dict):
                 vertex["label"] = reporting.as_html_table(label_item)
+                if vertex["color"] is None:
+                    r, g, b = (int(x * 256) for x in colour[label_item.get("label")])
+                    vertex["color"] = f"#{r:02x}{g:02x}{b:02x}"
             elif isinstance(label_item, tuple):
                 vertex["label"] = reporting.as_html_table(dict(label_item))
             else:
                 raise ValueError(
-                    f"expected int, dict, None or tuple of name-value pairs, got {k}"
+                    f"expected int, dict, None or tuple of name-value pairs, got {type(label_item)}"
                 )
         return graph
 
@@ -451,7 +446,6 @@ def unpack_trace(anchorfile: str, debug: bool = False) -> None:
     project = UnpackTraceProject(anchorfile, debug=debug)
     project.prepare_environment()
     with project.connection() as con:
-        # TODO: these two methods could be combined as neither is called anywhere else
         project.process_trace(con)
         con.print_summary()
 
@@ -463,7 +457,7 @@ def show_task_hierarchy(anchorfile: str, dotfile: str, debug: bool = False) -> N
     log.debug("project=%s", project)
 
     graph = ig.Graph(directed=True)
-    vertices: dict[TaskAttributes, ig.Vertex] = defaultdict(
+    vertices: dict[TaskDescriptor, ig.Vertex] = defaultdict(
         lambda: graph.add_vertex(shape="plain", style="filled")
     )
 
@@ -516,75 +510,58 @@ def show_control_flow_graph(
     project = BuildGraphFromDB(anchorfile, debug=debug)
     with project.connection() as con:
         log.info(" --> STEP: build cfg (task=%d)", task)
-        if simple:
-            cfg = project.build_control_flow_graph_simplified(
-                con,
-                task,
-                keys=["flavour", "task_label", "init_file", "init_func", "init_line"],
-                debug=debug,
-            )
-        else:
-            cfg = project.build_control_flow_graph(con, task, debug=debug)
-        if debug:
-            log.debug("cfg vertex attributes:")
-            for name in cfg.vs.attributes():
-                log.debug(" -- %s", name)
+        cfg = project.build_control_flow_graph(con, task, debug=debug, simple=simple)
         if style:
             log.info(" --> STEP: style cfg (task=%d)", task)
             cfg = project.style_graph(con, cfg, cfg.vs["attr"], debug=debug)
         else:
             log.info(" --> [ * SKIPPED * ] STEP: style cfg (task=%d)", task)
     log.info(" --> STEP: write cfg to file (dotfile=%s)", dotfile)
-    reporting.write_graph_to_file(cfg, filename=dotfile)
+    reporting.write_graph_to_file(cfg, filename=dotfile, drop=["attr", "foo"])
     log.info(" --> STEP: convert to svg")
     result, _, stderr, svgfile = reporting.convert_dot_to_svg(dotfile)
     if result != 0:
         for line in stderr:
             print(line, file=sys.stderr)
     else:
-        project.log.info("cfg for task %d written to %s", task, svgfile)
+        log.info("cfg for task %d written to %s", task, svgfile)
 
 
-def summarise_tasks_db(anchorfile: str, debug: bool = False) -> None:
+def summarise_tasks_db(
+    anchorfile: str, debug: bool = False, source: bool = False, tasks: bool = False
+) -> None:
     """Print summary information about a tasks database"""
 
     project = BuildGraphFromDB(anchorfile, debug=debug)
 
     with project.connection() as con:
+
+        title = f"=== SUMMARY OF {con.db} ==="
+        print("\n" + "=" * len(title))
+        print(title)
+        print("=" * len(title) + "\n\n")
+
+        print("::: Tables/Views :::\n")
         con.print_summary()
+        print()
 
+        if source:
+            print("::: Source Locations :::\n")
+            source_locations = con.source_locations()
+            for _, location in source_locations:
+                print(f"{location.file}:{location.line} in {location.func}")
+            print()
 
-def summarise_source_location(anchorfile: str, debug: bool = False) -> None:
-    """Print source locations in the trace"""
-
-    project = BuildGraphFromDB(anchorfile, debug=debug)
-
-    with project.connection() as con:
-        source_locations = con.source_locations()
-
-    for location in source_locations:
-        print(f"{location.file}:{location.func}:{location.line}")
-
-
-def summarise_task_types(anchorfile: str, debug: bool = False) -> None:
-    """Print all task definitions in the trace"""
-
-    project = BuildGraphFromDB(anchorfile, debug=debug)
-
-    with project.connection() as con:
-        task_types = con.task_types()
-
-    task_dicts = []
-    for task, num_tasks in task_types:
-        task_data = {
-            "label": task.label,
-            "init_location": str(task.init_location),
-            "start_location": str(task.start_location),
-            "end_location": str(task.end_location),
-        }
-        task_dicts.append({"count": num_tasks, "data": task_data})
-
-    print(json.dumps(task_dicts, indent=2))
+        if tasks:
+            print("::: Task Types :::\n")
+            for descriptor, num_tasks in con.task_types():
+                print(f"Count: {num_tasks}")
+                print("Data:")
+                print(f"  label:    {descriptor.label}")
+                print(f"  created:  {descriptor.init_location}")
+                print(f"  start:    {descriptor.start_location}")
+                print(f"  end:      {descriptor.end_location}")
+                print()
 
 
 def print_filter_to_stdout(include: bool, rules: List[List[str]]) -> None:
