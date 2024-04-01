@@ -1,14 +1,10 @@
 from __future__ import annotations
 
 import sqlite3
-from collections import defaultdict
-from itertools import groupby
 from typing import (
-    Any,
     Generator,
     Iterable,
     List,
-    Optional,
     Tuple,
     Union,
     Sequence,
@@ -16,22 +12,13 @@ from typing import (
 )
 
 import otter.log
-from ..definitions import SourceLocation, TaskAction, TaskAttributes
-from ..utils import batched
+from ..definitions import (
+    SourceLocation,
+    TaskDescriptor,
+    TaskAttributes,
+    TaskSchedulingState,
+)
 from . import scripts
-
-
-class Row(sqlite3.Row):
-    """A wrapper around sqlite3.Row with nicer printing"""
-
-    def __repr__(self) -> str:
-        values = ", ".join([f"{key}={self[key]}" for key in self.keys()])
-        return f"Row({values})"
-
-    def as_dict(self) -> dict:
-        """Return a row as a dict"""
-
-        return {key: self[key] for key in self.keys()}
 
 
 class Connection(sqlite3.Connection):
@@ -43,8 +30,6 @@ class Connection(sqlite3.Connection):
         self.debug = otter.log.log_with_prefix(prefix, otter.log.debug)
         self.info = otter.log.log_with_prefix(prefix, otter.log.info)
         self.db = db
-        self.default_row_factory = Row
-        self.row_factory = self.default_row_factory
         self._callbacks_on_close: List[Callable] = []
         sqlite3_version = getattr(sqlite3, "sqlite_version", "???")
         otter.log.info(f"using sqlite3.sqlite_version {sqlite3_version}")
@@ -66,22 +51,23 @@ class Connection(sqlite3.Connection):
     def print_summary(self) -> None:
         """Print summary information about the connected tasks database"""
 
-        print(f"=== Summary of {self.db} ===")
-
-        row_format = "{0:<8s} {1:20s} ({2} rows)"
+        row_format = "{0:<8s} {1:27s} {2:>6d}"
 
         otter.log.info("try to read from sqlite_schema")
         try:
             rows = self.execute(
-                "select name, type from sqlite_schema where type in ('table', 'view')"
+                "select name, type from sqlite_schema where type in ('table', 'view') order by type, name"
             ).fetchall()
         except sqlite3.OperationalError as err:
             otter.log.info(err)
             otter.log.info("failed to read from sqlite_schema, try from sqlite_master")
             rows = self.execute(
-                "select name, type from sqlite_master where type in ('table', 'view')"
+                "select name, type from sqlite_master where type in ('table', 'view') order by type, name"
             ).fetchall()
 
+        header = "Type     Name                          Rows"
+        print(header)
+        print("-" * len(header))
         for row in rows:
             query_count_rows = f"select count(*) as rows from {row['name']}"
             otter.log.debug(query_count_rows)
@@ -110,7 +96,7 @@ class Connection(sqlite3.Connection):
         query = (
             "select count(*) as num_children from task_relation where parent_id in (?)"
         )
-        return cur.execute(query, (task,)).fetchone()["num_children"]
+        return cur.execute(query, (task,)).fetchone()[0]
 
     def children_of(self, parent: int) -> List[int]:
         cur = self.cursor()
@@ -127,201 +113,68 @@ class Connection(sqlite3.Connection):
         cur.execute(scripts.get_descendants, (task,))
         return [row["id"] for row in cur.fetchall()]
 
-    def attributes_of(self, tasks: Iterable[int]) -> Tuple[Any, ...]:
-        # TODO: consider returning Tuple[TaskAttributes] instead
-        tasks = tuple(tasks)
-        placeholder = ",".join("?" for _ in tasks)
-        query_str = (
-            f"select * from task_attributes where id in ({placeholder}) order by id\n"
-        )
-        cur = self.execute(query_str, tasks)
-        return tuple(cur.fetchall())
-
-    def task_attributes(
-        self, tasks: Union[int, Sequence[int]]
-    ) -> List[Tuple[int, int, int, str, str, str, TaskAttributes]]:
+    def task_attributes(self, tasks: Union[int, Sequence[int]]) -> List[TaskAttributes]:
         if isinstance(tasks, int):
             tasks = (tasks,)
         placeholder = ",".join("?" for _ in tasks)
         query_str = (
             f"select * from task_attributes where id in ({placeholder}) order by id\n"
         )
-        self.row_factory = self._task_attributes_row_factory
         cur = self.execute(query_str, tuple(tasks))
-        self.row_factory = Row
-        return cur.fetchall()
-
-    def task_suspend_ts(
-        self, tasks: Iterable[int]
-    ) -> Generator[tuple[int, list[tuple[int, int]]], Any, None]:
-        tasks = tuple(tasks)
-        placeholder = ",".join("?" for _ in tasks)
-        query = f"""select *
-        from task_history
-        where id in ({placeholder})
-        and action in ({TaskAction.SUSPEND.value}, {TaskAction.RESUME.value})
-        order by id, time"""
-        cur = self.execute(query, tasks)
-        rows = cur.fetchall()
-        grouper = groupby(rows, key=lambda row: row["id"])
-        for task_id, task_suspend_iter in grouper:
-            timestamps = []
-            for suspended, resumed in batched(task_suspend_iter, 2):
-                assert suspended["action"] == TaskAction.SUSPEND
-                assert resumed["action"] == TaskAction.RESUME
-                timestamps.append((int(suspended["time"]), int(resumed["time"])))
-            yield task_id, timestamps
-
-    def time_active(self, tasks: Sequence[int]) -> Sequence[Tuple[int, int, int]]:
-        "Return a tuple of task id, time active & time inactive for each task"
-        tasks = tuple(tasks)
-        placeholder = ",".join("?" for _ in tasks)
-        query = f"""
-        select id
-            ,sum(case when action in ({TaskAction.END.value}, {TaskAction.SUSPEND.value}) and prev_id = id then cast(time as int) - cast(prev_time as int) else 0 end) as time_active
-            ,sum(case when action in ({TaskAction.START.value}, {TaskAction.RESUME.value}) and prev_id = id then cast(time as int) - cast(prev_time as int) else 0 end) as time_inactive
-        from (
-            select hist.id
-                ,hist.action
-                ,hist.time
-                ,lag(time) over (order by id, time) as prev_time
-                ,lag(id) over (order by id, time) as prev_id
-            from task_history as hist
-            where id in ({placeholder})
-                and hist.action in (2, 3, 4, 5)
-            order by id, time
-        )
-        group by id
-        """
-        cur = self.execute(query, tasks)
-        rows = cur.fetchall()
-        result = [(row["id"], row["time_active"], row["time_inactive"]) for row in rows]
-        return result
-
-    @staticmethod
-    def _parent_child_attributes_row_factory(
-        _, values: Tuple[Any, ...]
-    ) -> Tuple[TaskAttributes, TaskAttributes, int]:
-        parent_attr, child_attr = values[0:11], values[11:22]
-        parent = TaskAttributes(*parent_attr)
-        child = TaskAttributes(*child_attr)
-        total = values[22]
-        return parent, child, total
-
-    @staticmethod
-    def _task_count_by_attributes_row_factory(
-        _, values: Tuple[Any, ...]
-    ) -> Tuple[TaskAttributes, int]:
-        task_attr = (values[0], 0, *values[1:10])
-        count: int = values[10]
-        return TaskAttributes(*task_attr), count
-
-    @staticmethod
-    def _source_location_row_factory(_, values: tuple[Any, ...]) -> SourceLocation:
-        return SourceLocation(*values)
-
-    @staticmethod
-    def _task_attributes_row_factory(_, values: tuple[Any, ...]):
-        (
-            task_id,
-            parent_id,
-            num_children,
-            flavour,
-            label,
-            create_ts,
-            start_ts,
-            end_ts,
-            *locations,
-        ) = values
-        return (
-            task_id,
-            parent_id,
-            num_children,
-            create_ts,
-            start_ts,
-            end_ts,
-            TaskAttributes(label, flavour, *locations),
-        )
+        return list(TaskAttributes(*row) for row in cur)
 
     def parent_child_attributes(
         self,
-    ) -> List[Tuple[TaskAttributes, TaskAttributes, int]]:
+    ) -> List[Tuple[TaskDescriptor, TaskDescriptor, int]]:
         """Return tuples of task attributes for each parent-child link and the number of such links"""
 
-        self.row_factory = self._parent_child_attributes_row_factory
         cur = self.execute(scripts.count_children_by_parent_attributes)
-        results = cur.fetchall()
+        results = [
+            (TaskDescriptor(*row[0:11]), TaskDescriptor(*row[11:22]), row[22])
+            for row in cur
+        ]
         otter.log.debug("got %d rows", len(results))
         return results
 
-    def child_sync_points(self, task: int, debug: bool = False) -> Tuple[Any]:
-        """Get the sequences of child tasks synchronised during a task."""
-
-        cur = self.cursor()
-        cur.execute(scripts.get_child_sync_points, (task, task))
-        results = tuple(cur.fetchall())
-        if debug:
-            otter.log.debug("child_sync_points: got %d results", len(results))
-        return results
-
-    def sync_groups(
-        self, task: int, debug: bool = False
-    ) -> Generator[Tuple[Optional[int], List[Row]], None, None]:
-        """Get the sequences of child tasks synchronised during a task.
-
-        For each sequence (group of synchronised tasks), yield a sequence
-        identifier and the rows representing the synchronised tasks.
-        """
-
-        records = self.child_sync_points(task, debug=debug)
-        sequences = defaultdict(list)
-        for row in records:
-            sequences[row["sequence"]].append(row)
-        for seq, rows in sequences.items():
-            if debug:
-                otter.log.debug(
-                    "sync_groups: sequence %s yielding %d records", seq, len(rows)
-                )
-            yield seq, rows
-
-    def task_synchronisation_groups(self, task: int):
-        records = self.child_sync_points(task)
-        sequence_rows = defaultdict(list)
-        sync_start_ts = {}
-        chunk_duration = {}
-        sync_descendants = {}
-        for row in records:
-            seq = row["sequence"]
-            sequence_rows[seq].append(row)
-            if seq not in sync_start_ts:
-                sync_start_ts[seq] = int(row["sync_ts"])
-            if seq not in chunk_duration:
-                chunk_duration[seq] = int(row["chunk_duration"])
-            if seq not in sync_descendants:
-                sync_descendants[seq] = bool(row["sync_descendants"])
-        for seq, rows in sequence_rows.items():
-            yield (
-                seq,
-                rows,
-                sync_start_ts[seq],
-                sync_descendants[seq],
-                chunk_duration[seq],
-            )
-
-    def source_locations(self):
+    def source_locations(self) -> List[Tuple[int, SourceLocation]]:
         """Get all the source locations defined in the trace"""
 
-        self.row_factory = self._source_location_row_factory
-        cur = self.execute("select * from source_location")
-        results: List[SourceLocation] = cur.fetchall()
+        results = [
+            (location_id, SourceLocation(*row))
+            for (location_id, *row) in self.execute(
+                "select src_loc_id, file_name, func_name, line from source_location order by file_name, line"
+            )
+        ]
         otter.log.debug("got %d source locations", len(results))
         return results
 
-    def task_types(self) -> List[Tuple[TaskAttributes, int]]:
+    def task_types(self) -> Generator[Tuple[TaskDescriptor, int], None, None]:
         """Return task attributes for each distinct set of task attributes and the number of such records"""
 
-        self.row_factory = self._task_count_by_attributes_row_factory
         cur = self.execute(scripts.count_tasks_by_attributes)
-        results = cur.fetchall()
-        otter.log.debug("got %d task definitions", len(results))
-        return results
+        return ((TaskDescriptor(row[0], -1, *row[1:10]), row[10]) for row in cur)
+
+    def task_scheduling_states(self, tasks: Tuple[int]) -> List[TaskSchedulingState]:
+        """Return 1 row per task scheduling state during the task's lifetime"""
+
+        query = scripts.get_task_scheduling_states.format(
+            placeholder=",".join("?" for task in tasks)
+        )
+        return [TaskSchedulingState(*row) for row in self.execute(query, tasks)]
+
+    def task_suspend_meta(self, task: int) -> Tuple[Tuple[str, bool], ...]:
+        """Return the metadata for each suspend event encountered by a task"""
+
+        query = "select time, sync_descendants from task_suspend_meta where id in (?)"
+        cur = self.execute(query, (task,))
+        return tuple((time, bool(sync_descendants)) for (time, sync_descendants) in cur)
+
+    def children_created_between(
+        self, task: int, start_ts: str, end_ts: str
+    ) -> List[Tuple[int, str]]:
+        """Return the children created between the given start & end times"""
+
+        query = scripts.get_children_created_between.format(
+            start_ts=start_ts, end_ts=end_ts
+        )
+        return list(self.execute(query, (task,)))
