@@ -2,6 +2,7 @@ from importlib import resources
 
 from . import _scripts
 
+
 def get_sql(name: str) -> str:
     return resources.read_text(_scripts, name)
 
@@ -16,13 +17,10 @@ count_tasks: str = get_sql("tasks_count.sql")
 count_tasks_by_attributes: str = get_sql("tasks_count_tasks_by_attributes.sql")
 count_children_by_parent_attributes = get_sql("tasks_count_children_by_attributes.sql")
 count_chunks = get_sql("chunks_get_num_chunks.sql")
-insert_chunk: str = get_sql("tasks_insert_chunk.sql")
 insert_chunk_events: str = get_sql("chunks_insert_event_pos.sql")
-insert_context: str = get_sql("tasks_insert_context.sql")
-insert_synchronisation: str = get_sql("tasks_insert_synchronisation.sql")
 get_ancestors: str = get_sql("tasks_get_ancestors.sql")
 get_descendants: str = get_sql("tasks_get_descendants.sql")
-get_child_sync_points: str = get_sql("tasks_get_child_sync_points.sql")
 get_chunk_events: str = get_sql("chunks_get_event_pos.sql")
 get_chunk_ids: str = get_sql("chunks_get_chunk_refs.sql")
-# get_all_source_locations: str = get_sql("tasks_get_all_source_locations.sql")
+get_task_scheduling_states: str = get_sql("tasks_get_scheduling_states.sql")
+get_children_created_between: str = get_sql("tasks_get_children_created_between.sql")
