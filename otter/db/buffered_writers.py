@@ -19,7 +19,7 @@ class BufferedDBWriter:
     ) -> None:
         placeholder = ",".join("?" * nargs)
         self.sql_insert_row = f"insert into {table} values({placeholder});"
-        self.sql_count_rows = f"select count(*) as rows from {table};"
+        self.sql_count_rows = f"select count(*) from {table};"
         prefix = f"[{self.__class__.__name__}({table=})]"
         self.debug = otter.log.log_with_prefix(prefix, otter.log.debug)
         self.info = otter.log.log_with_prefix(prefix, otter.log.info)
@@ -38,7 +38,7 @@ class BufferedDBWriter:
     def close(self):
         self._flush()
         if otter.log.is_debug_enabled():
-            rows = self.con.execute(self.sql_count_rows).fetchone()["rows"]
+            (rows,) = self.con.execute(self.sql_count_rows).fetchone()
             self.debug("contains %d rows", rows)
 
     def _flush(self):
