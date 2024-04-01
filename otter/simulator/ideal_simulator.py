@@ -1,4 +1,5 @@
-from typing import Optional, Sequence, Protocol
+from typing import Optional, Sequence, Protocol, List, Dict, Tuple
+from itertools import count
 
 import otter.log
 import otter.db
@@ -35,15 +36,17 @@ class TaskScheduler:
         global_ts = 0
         root_task_attributes = self.con.task_attributes(self._root_tasks)
         otter.log.info("simulate %d tasks", self.con.num_tasks())
-        for task, *_, create_ts, start_ts, end_ts, attr in root_task_attributes:
-            print(f"Simulate root task {task}")
-            print(f"    Start: {attr.start_location}")
-            print(f"    End:   {attr.end_location}")
-            duration_observed = int(end_ts) - int(start_ts)
+        for root_task_attr in root_task_attributes:
+            print(f"Simulate root task {root_task_attr.id}")
+            print(f"    Start: {root_task_attr.descriptor.start_location}")
+            print(f"    End:   {root_task_attr.descriptor.end_location}")
+            duration_observed = int(root_task_attr.end_ts) - int(
+                root_task_attr.start_ts
+            )
             duration = self.descend(
-                task,
-                start_ts,
-                end_ts,
+                root_task_attr.id,
+                root_task_attr.start_ts,
+                root_task_attr.end_ts,
                 0,
                 global_ts,
             )
@@ -98,47 +101,60 @@ class TaskScheduler:
         "taskwait-inclusive duration" among the children synchronised by a barrier
         """
 
-        (_, execution_native_dt, _), *_ = self.con.time_active((task,))
+        execution_native_dt, suspended_ideal_dt = 0, 0
 
-        #! NOTE: could improve the SQL behind this as there's a lot of duplicated info returned when getting task sync groups.
-        #! could just return 1 row per sequence with the relevant times/durations, then 1 table per sequence with the synchronised child task IDs
-        suspended_ideal_dt = 0  # idealised suspended duration
-        sync_groups = list(self.con.task_synchronisation_groups(task))
-        for (
-            sequence,
-            rows,
-            sync_start_ts,
-            sync_descendants,
-            chunk_duration,
-        ) in sync_groups:
-            # self.schedule_writer.insert task-suspend event at start of barrier
-            child_crt_dt = [(r["child_id"], r["child_crt_dt"]) for r in rows]
-            sync_children_attr = self.con.task_attributes([r["child_id"] for r in rows])
-            barrier_duration = 0
-            critical_task = None
-            for (child, *_, create_ts, start_ts, end_ts, _), (
-                _child,
-                crt_dt,
-            ) in zip(sync_children_attr, child_crt_dt, strict=True):
-                assert child == _child
-                child_duration = self.descend(
-                    child, start_ts, end_ts, depth + 1, global_start_ts + crt_dt
+        task_states = self.con.task_scheduling_states((task,))
+        task_suspend_meta = dict(self.con.task_suspend_meta(task))
+        children_pending: Dict[str, List[Tuple[int, str]]] = {}
+        otter.log.debug("got %d task scheduling states", len(task_states))
+        barrier_counter = count()
+        for state in task_states:
+            if state.action_start in (TaskAction.START, TaskAction.RESUME):
+                # task in an active state
+                execution_native_dt = execution_native_dt + state.duration
+                # store the children created during this period
+                children_pending[state.end_ts] = self.con.children_created_between(
+                    task, state.start_ts, state.end_ts
                 )
-                duration_into_barrier = child_duration - (
-                    int(sync_start_ts) - int(create_ts)
-                )
-                if duration_into_barrier > barrier_duration:
-                    barrier_duration = duration_into_barrier
-                    critical_task = child
-            if critical_task is not None:
-                self.crit_task_writer.insert(task, sequence, critical_task)
-            suspended_ideal_dt = suspended_ideal_dt + barrier_duration
-            # self.schedule_writer.insert task-resume event after barrier
-            global_start_ts = global_start_ts + chunk_duration + barrier_duration
+                global_start_ts = global_start_ts + state.duration
+            elif state.action_start == TaskAction.SUSPEND:
+                # task is suspended
+                critical_task = None
+                barrier_duration = 0
+                sync_descendants = task_suspend_meta[state.start_ts]
+                # get the children synchronised at this point
+                children = children_pending.get(state.start_ts, [])
+                child_ids: List[int]
+                child_ids, _ = list(zip(*children))
+                children_attr = self.con.task_attributes(child_ids)
+                for child_attr in children_attr:
+                    child_crt_dt = int(state.start_ts) - int(child_attr.create_ts)
+                    child_duration = self.descend(
+                        child_attr.id,
+                        child_attr.start_ts,
+                        child_attr.end_ts,
+                        depth + 1,
+                        global_start_ts - child_crt_dt,
+                    )
+                    duration_into_barrier = child_duration - (
+                        int(state.start_ts) - int(child_attr.create_ts)
+                    )
+                    if duration_into_barrier > barrier_duration:
+                        barrier_duration = duration_into_barrier
+                        critical_task = child_attr.id
+                if critical_task is not None:
+                    self.crit_task_writer.insert(
+                        task, next(barrier_counter), critical_task
+                    )
+                suspended_ideal_dt = suspended_ideal_dt + barrier_duration
+                global_start_ts = global_start_ts + barrier_duration
+            elif state.action_start == TaskAction.CREATE:
+                # task is created and not yet started
+                pass
+            else:
+                otter.log.error("UNKNOWN STATE: %s", state)
 
-        taskwait_inclusive_dt = execution_native_dt + suspended_ideal_dt
-
-        return taskwait_inclusive_dt
+        return execution_native_dt + suspended_ideal_dt
 
     def leaf_task(
         self,
