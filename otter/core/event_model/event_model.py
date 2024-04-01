@@ -1,11 +1,9 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from collections import defaultdict
-from itertools import islice
+
 from typing import (
     Any,
-    DefaultDict,
     Deque,
     Dict,
     Iterable,
@@ -278,28 +276,6 @@ class BaseEventModel(ABC):
     def get_source_location(self, event: Event) -> SourceLocation:
         """Get the source location of this event"""
         raise NotImplementedError()
-
-    def contexts_of(self, chunk: Chunk) -> List[Tuple[bool, List[int], int]]:
-        """Construct a list of task synchronisation contexts encountered during a task"""
-        #! NOTE: this method assumes some knowledge about the event model by accessing event attributes directly
-        contexts: List[Tuple[bool, List[int], int]] = []
-        task_cache: DefaultDict[int, List[int]] = defaultdict(list)
-        for event in islice(chunk.events, 1, None):
-            encountering_task_id = event.encountering_task_id
-            if event.encountering_task_id == NullTaskID:
-                raise RuntimeError("unexpected NullTask")
-            if self.is_task_sync_event(event):
-                descendants = bool(
-                    event.sync_descendant_tasks == TaskSyncType.descendants
-                )
-                contexts.append(
-                    (descendants, task_cache[encountering_task_id], event.time)
-                )
-                # Clear the current list from the cache so we create a new one next time around
-                del task_cache[encountering_task_id]
-            elif self.is_task_create_event(event):
-                task_cache[encountering_task_id].append(event.unique_id)
-        return contexts
 
 
 class EventModelFactory:
