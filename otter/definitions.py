@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import InitVar, asdict, dataclass, field
 from enum import Enum
-from typing import Any, NamedTuple, Protocol, Optional
+from typing import NamedTuple, Protocol, Optional
 
 
 class Attr(str, Enum):
@@ -151,23 +151,38 @@ class SourceLocation(NamedTuple):
         return f"{self.file}:{self.line} in {self.func}"
 
 
+class TaskSchedulingState(NamedTuple):
+    task: int
+    action_start: int
+    action_end: int
+    file_name_start: str
+    line_start: int
+    file_name_end: str
+    line_end: int
+    start_ts: str
+    end_ts: str
+    duration: int
+
+    def __str__(self) -> str:
+        return f"{self.__class__.__name__}(task={self.task}, {TaskAction(self.action_start)}:{self.start_ts} -> {TaskAction(self.action_end)}:{self.end_ts})"
+
+
+# TODO: dataclasses probably make more sense belonging to otter.db
 @dataclass(frozen=True)
-class TaskAttributes:
+class TaskDescriptor:  # For use in Connection.parent_child_attributes
+    # Describes the invariant attributes of a task i.e. those compiled into the annotations
+
     label: str
     flavour: int
-
     init_file: InitVar[str]
     init_func: InitVar[str]
     init_line: InitVar[int]
-
     start_file: InitVar[str]
     start_func: InitVar[str]
     start_line: InitVar[int]
-
     end_file: InitVar[str]
     end_func: InitVar[str]
     end_line: InitVar[int]
-
     init_location: SourceLocation = field(init=False)
     start_location: SourceLocation = field(init=False)
     end_location: SourceLocation = field(init=False)
@@ -197,8 +212,67 @@ class TaskAttributes:
     def is_null(self) -> bool:
         return self.label is None and self.flavour is None
 
-    def __str__(self) -> str:
-        return f'TaskAttributes(label="{self.label}", init={str(self.init_location)}, start={str(self.start_location)}, end={str(self.end_location)}'
+    def asdict(self):
+        return asdict(self)
+
+
+@dataclass(frozen=True)
+class TaskAttributes:
+    # Describes the variant (runtime-dependent) and invariant attributes of a task
+    # Contains the fields returned by the `task_attributes` view
+
+    id: int
+    parent: int
+    children: int
+    flavour: InitVar[int]
+    label: InitVar[str]
+    create_ts: str
+    start_ts: str
+    end_ts: str
+    init_file: InitVar[str]
+    init_func: InitVar[str]
+    init_line: InitVar[int]
+    start_file: InitVar[str]
+    start_func: InitVar[str]
+    start_line: InitVar[int]
+    end_file: InitVar[str]
+    end_func: InitVar[str]
+    end_line: InitVar[int]
+    descriptor: TaskDescriptor = field(init=False)
+
+    def __post_init__(
+        self,
+        flavour: int,
+        label: str,
+        init_file: str,
+        init_func: str,
+        init_line: int,
+        start_file: str,
+        start_func: str,
+        start_line: int,
+        end_file: str,
+        end_func: str,
+        end_line: int,
+    ) -> None:
+        super().__setattr__(
+            "descriptor",
+            TaskDescriptor(
+                label,
+                flavour,
+                init_file,
+                init_func,
+                init_line,
+                start_file,
+                start_func,
+                start_line,
+                end_file,
+                end_func,
+                end_line,
+            ),
+        )
+
+    def is_null(self) -> bool:
+        return self.descriptor.is_null()
 
     def asdict(self):
         return asdict(self)
@@ -207,6 +281,7 @@ class TaskAttributes:
 NullTaskID = 18446744073709551615
 
 
+# TODO: callbacks for dispatching data probably belong in otter.db
 class TaskMetaCallback(Protocol):
     """Callback used to dispatch task metadata"""
 
