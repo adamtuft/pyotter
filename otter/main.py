@@ -30,7 +30,7 @@ def _select_action(args) -> None:
 
     otter.log.initialise(args.loglevel)
 
-    debug = args.loglevel == otter.log.Level.DEBUG
+    debug = args.loglevel == otter.log.Level.DEBUG.name.lower()
 
     with otter.profile.output(args.profile):
         if args.action == Action.UNPACK:
@@ -50,12 +50,9 @@ def _select_action(args) -> None:
                     args.anchorfile, args.dotfile, debug=debug
                 )
         elif args.action == Action.SUMMARY:
-            if args.source:
-                otter.project.summarise_source_location(args.anchorfile, debug=debug)
-            if args.tasks:
-                otter.project.summarise_task_types(args.anchorfile, debug=debug)
-            else:
-                otter.project.summarise_tasks_db(args.anchorfile, debug=debug)
+            otter.project.summarise_tasks_db(
+                args.anchorfile, debug=debug, source=args.source, tasks=args.tasks
+            )
         elif args.action == Action.FILTER:
             otter.project.print_filter_to_stdout(
                 bool(args.include), args.include or args.exclude
