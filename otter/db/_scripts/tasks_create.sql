@@ -80,31 +80,31 @@ create table string(
 );
 
 -- List each task synchronisation and the tasks it applies to
-create table synchronisation(
-    context_id int not null,
-    task_id int not null,
-    primary key (context_id, task_id),
-    foreign key (task_id) references task (id),
-    foreign key (context_id) references context (context_id)
-);
+-- create table synchronisation(
+--     context_id int not null,
+--     task_id int not null,
+--     primary key (context_id, task_id),
+--     foreign key (task_id) references task (id),
+--     foreign key (context_id) references context (context_id)
+-- );
 
 -- List the sync contexts in order within each task
-create table chunk(
-    encountering_task_id int not null,
-    context_id int not null,
-    sequence int not null,
-    primary key (encountering_task_id, context_id, sequence),
-    foreign key (encountering_task_id) references task (id),
-    foreign key (context_id) references context (context_id)
-);
+-- create table chunk(
+--     encountering_task_id int not null,
+--     context_id int not null,
+--     sequence int not null,
+--     primary key (encountering_task_id, context_id, sequence),
+--     foreign key (encountering_task_id) references task (id),
+--     foreign key (context_id) references context (context_id)
+-- );
 
 -- Metadata about each task synchronisation context
-create table context(
-    context_id int not null,
-    sync_descendants int not null,
-    sync_ts,
-    primary key (context_id)
-);
+-- create table context(
+--     context_id int not null,
+--     sync_descendants int not null,
+--     sync_ts,
+--     primary key (context_id)
+-- );
 
 -- List the location_ref and local event positions contained in each chunk
 create table chunk_contents(
