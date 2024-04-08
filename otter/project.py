@@ -3,7 +3,7 @@ from __future__ import annotations
 import os
 import sys
 from collections import defaultdict
-from contextlib import ExitStack, contextmanager
+from contextlib import ExitStack, contextmanager, closing
 from typing import Any, AnyStr, Dict, List, Set
 
 import igraph as ig
@@ -593,6 +593,6 @@ def print_filter_to_stdout(include: bool, rules: List[List[str]]) -> None:
 def simulate_schedule(anchorfile: str, debug: bool = False) -> None:
 
     project = SimulateFromDB(anchorfile, debug)
-    with project.connection() as con:
+    with closing(project.connection()) as con:
         log.info(f"simulating trace {anchorfile}")
         otter.simulator.simulate_ideal(con)
