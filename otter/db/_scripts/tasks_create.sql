@@ -3,25 +3,21 @@
 -- List the tasks
 create table task(
     id int unique not null,
-
-    -- these fields removed as they can be calculated from the task_history table
-    -- start_ts,
-    -- end_ts,
-    -- duration int,
-
-    -- these fields removed as they are now in the task_history table
-    -- init_loc_id int not null,  -- the location where the task was initialised
-    -- start_loc_id int not null, -- the location where the task started
-    -- end_loc_id int not null,   -- the location where the task ended
-
+    parent_id int,
+    num_children int,     -- set during finalisation
     flavour int,
     user_label int,
-    primary key (id)
-
-    -- these keys removed as their fields removed
-    -- foreign key (init_loc_id) references source (src_loc_id),
-    -- foreign key (start_loc_id) references source (src_loc_id),
-    -- foreign key (end_loc_id) references source (src_loc_id)
+    create_ts,            -- set during finalisation        
+    start_ts,             -- set during finalisation       
+    end_ts,               -- set during finalisation     
+    create_location int,  -- set during finalisation
+    start_location int,   -- set during finalisation
+    end_location int,     -- set during finalisation
+    primary key (id),
+    foreign key (user_label) references string (id),
+    foreign key (create_location) references source (src_loc_id),
+    foreign key (start_location) references source (src_loc_id),
+    foreign key (end_location) references source (src_loc_id)
 );
 
 -- List actions of each task, using partial keys to enforce uniqueness of some actions

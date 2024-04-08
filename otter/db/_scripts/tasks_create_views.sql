@@ -1,24 +1,5 @@
 -- Create views of the tables in a tasks db
 
-create view if not exists task_history(
-        id
-        ,action
-        ,time
-        ,location_id
-    ) as
-    select id
-        ,action
-        ,time
-        ,location_id
-    from task_history_unique
-    union all
-    select id
-        ,action
-        ,time
-        ,location_id
-    from task_history_multi
-;
-
 -- Get a readable view of the tasks' creation locations
 create view if not exists task_create_location(
          id
@@ -148,19 +129,6 @@ create view if not exists task_attributes as
     left join task_relation as children
         on task.id = children.parent_id
 	group by task.id
-;
-
--- A readable view of all source locations
-create view if not exists source_location as
-    select source.src_loc_id
-        ,file_name.text as file_name
-        ,line
-        ,func_name.text as func_name
-    from source
-    left join string as file_name
-        on source.file_id = file_name.id
-    left join string as func_name
-        on source.func_id = func_name.id
 ;
 
 -- 
