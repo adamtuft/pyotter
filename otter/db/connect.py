@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 import sqlite3
 from typing import (
     Generator,
@@ -25,15 +26,25 @@ from . import scripts
 class Connection(sqlite3.Connection):
     """Implements the connection to and operations on an Otter task database"""
 
-    def __init__(self, db: str, **kwargs):
-        super().__init__(db, **kwargs)
+    def __init__(self, db: str, overwrite: bool = False, **kwargs):
         prefix = f"[{self.__class__.__name__}]"
+        self.warning = otter.log.log_with_prefix(prefix, otter.log.warning)
         self.debug = otter.log.log_with_prefix(prefix, otter.log.debug)
         self.info = otter.log.log_with_prefix(prefix, otter.log.info)
         self.db = db
         self._callbacks_on_close: List[Callable] = []
         sqlite3_version = getattr(sqlite3, "sqlite_version", "???")
         otter.log.info(f"using sqlite3.sqlite_version {sqlite3_version}")
+        if overwrite and os.path.exists(db):
+            self.warning("overwriting tasks database %s", db)
+            os.remove(db)
+        super().__init__(db, **kwargs)
+
+    def create_all(self):
+        self.info(" -- create tables")
+        self.executescript(scripts.create_tasks)
+        self.info(" -- create views")
+        self.executescript(scripts.create_views)
 
     def commit(self):
         self.debug("commit called")
