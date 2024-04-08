@@ -3,7 +3,7 @@ from __future__ import annotations
 import os
 import sys
 from collections import defaultdict
-from contextlib import ExitStack, closing
+from contextlib import ExitStack, contextmanager
 from typing import Any, AnyStr, Dict, List, Set
 
 import igraph as ig
@@ -21,6 +21,7 @@ from otter.db import (
     DBStringDefinitionWriter,
 )
 from otter.db.types import SourceLocation, TaskDescriptor
+from otter.utils.context import closing_all
 
 from . import db, reporting
 from .core import Chunk, DBChunkBuilder
@@ -73,10 +74,9 @@ class Project:
         """Get the absolute path of an internal folder"""
         return os.path.abspath(os.path.join(self.project_root, relname))
 
-    def connection(self, close: bool = True, overwrite: bool = False):
-        """Return a connection to this project's tasks db for use in a with-block"""
-        con = db.Connection(self.tasks_db, overwrite=overwrite)
-        return closing(con) if close else con
+    def connection(self, /, **kwargs):
+        """Return a connection to this project's tasks db"""
+        return db.Connection(self.tasks_db, **kwargs)
 
 
 class UnpackTraceProject(Project):
@@ -87,11 +87,19 @@ class UnpackTraceProject(Project):
         self.source_location_id: Dict[SourceLocation, int] = LabellingDict()
         self.string_id: Dict[str, int] = LabellingDict()
 
+    @contextmanager
+    def prepare_connection(self, summarise: bool = True):
+        con = self.connection(overwrite=True, initialise=True)
+        log.info("created database %s", self.tasks_db)
+        yield con
+        con.finalise()
+        con.commit()
+        if summarise:
+            con.print_summary()
+        con.close()
+
     def process_trace(self, con: otter.db.Connection):
         """Read a trace and create a database of tasks"""
-
-        con.create_all()
-        log.info("created database %s", self.tasks_db)
 
         log.info("processing trace")
 
@@ -105,14 +113,9 @@ class UnpackTraceProject(Project):
         )
         string_writer = DBStringDefinitionWriter(con, self.string_id)
 
-        # Defer writing these definitions until the connection is closed so that
-        # everything to be defined has had an ID generated
-        con.on_close(source_writer.close)
-        con.on_close(string_writer.close)
-
         # Build the chunks & tasks data
-        with ExitStack() as stack:
-            reader = stack.enter_context(otf2_ext.open_trace(self.anchorfile))
+        with ExitStack() as outer:
+            reader = outer.enter_context(otf2_ext.open_trace(self.anchorfile))
 
             log.info("recorded trace version: %s", reader.trace_version)
 
@@ -143,7 +146,7 @@ class UnpackTraceProject(Project):
             location_counter = CountingDict(start=1)
 
             # Get the global event reader which streams all events
-            global_event_reader = stack.enter_context(reader.events())
+            global_event_reader = outer.enter_context(reader.events())
 
             event_iter: TraceEventIterable = (
                 (
@@ -156,10 +159,17 @@ class UnpackTraceProject(Project):
 
             log.info("building chunks")
             log.info("using chunk builder: %s", str(chunk_builder))
-            with ExitStack() as temp:
-                chunk_builder = temp.enter_context(closing(chunk_builder))
-                task_meta_writer = temp.enter_context(closing(task_meta_writer))
-                task_action_writer = temp.enter_context(closing(task_action_writer))
+
+            # Push source & string writers before chunk & task builders so the
+            # definitions get generated first, then flushed when the writers
+            # are closed
+            with closing_all(
+                source_writer,
+                string_writer,
+                chunk_builder,
+                task_meta_writer,
+                task_action_writer,
+            ):
                 num_chunks = self.event_model.generate_chunks(
                     event_iter,
                     chunk_builder,
@@ -167,10 +177,8 @@ class UnpackTraceProject(Project):
                     task_action_writer.add_task_action,
                     task_action_writer.add_task_suspend_meta,
                 )
-
-            log.info("generated %d chunks", num_chunks)
-
-        con.commit()
+                log.info("generated %d chunks", num_chunks)
+                log.info("finalise definitions...")
 
 
 class BuildGraphFromDB(Project):
@@ -425,9 +433,9 @@ def unpack_trace(anchorfile: str, debug: bool = False) -> None:
     log.info("using OTF2 python version %s", otf2_ext.version)
 
     project = UnpackTraceProject(anchorfile, debug=debug)
-    with project.connection(overwrite=True) as con:
+    with project.prepare_connection() as con:
         project.process_trace(con)
-        con.print_summary()
+        log.info("finalise database...")
 
 
 def show_task_hierarchy(anchorfile: str, dotfile: str, debug: bool = False) -> None:
@@ -527,7 +535,7 @@ def summarise_tasks_db(
 
         if source:
             print("::: Source Locations :::\n")
-            source_locations = con.source_locations()
+            source_locations = con.get_all_source_locations()
             for _, location in source_locations:
                 print(f"{location.file}:{location.line} in {location.func}")
             print()
