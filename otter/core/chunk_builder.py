@@ -5,6 +5,8 @@ import sqlite3
 
 from otter import db
 
+import otter.log
+
 from .events import Event
 
 
@@ -12,6 +14,7 @@ class ChunkKeyNotFoundError(Exception):
 
     def __init__(self, key: int) -> None:
         super().__init__(f"chunk key not found: {key}")
+
 
 class ChunkKeyDuplicateError(Exception):
 
@@ -22,28 +25,28 @@ class ChunkKeyDuplicateError(Exception):
 class ChunkBuilderProtocol(Protocol):
     """Capable of building the set of chunks from a trace"""
 
-    def __len__(self) -> int:
-        ...
+    def __len__(self) -> int: ...
 
-    def new_chunk(self, key: int, event: Event, location_ref: int, location_count: int):
-        ...
+    def new_chunk(
+        self, key: int, event: Event, location_ref: int, location_count: int
+    ): ...
 
     def append_to_chunk(
         self, key: int, event: Event, location_ref: int, location_count: int
-    ) -> None:
-        ...
+    ) -> None: ...
 
-    def contains(self, key: int) -> bool:
-        ...
+    def contains(self, key: int) -> bool: ...
 
-    def close(self):
-        ...
+    def close(self): ...
 
 
 class DBChunkBuilder:
     """Builds a database representation of the chunks in a trace"""
 
     def __init__(self, con: sqlite3.Connection, bufsize: int = 100) -> None:
+        self.debug = otter.log.log_with_prefix(
+            f"[{self.__class__.__name__}]", otter.log.debug
+        )
         self.con = con
         self.bufsize = bufsize
         self._buffer: List[Tuple[int, int, int]] = []
@@ -80,6 +83,7 @@ class DBChunkBuilder:
         return len(rows) > 0
 
     def close(self):
+        self.debug("closing...")
         self._flush()
 
     def _flush(self):
