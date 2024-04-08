@@ -24,9 +24,6 @@ class DBSourceLocationWriter:
     def __iter__(self):
         self.debug("%d items:", len(self._source_location_id))
         for location, loc_id in self._source_location_id.items():
-            self.debug(
-                f"{loc_id=}, {location=}, file_id={self._string_id_lookup[location.file]}, func_id={self._string_id_lookup[location.func]}"
-            )
             yield (
                 loc_id,
                 self._string_id_lookup[location.file],
@@ -35,5 +32,6 @@ class DBSourceLocationWriter:
             )
 
     def close(self):
+        self.debug("closing...")
         self._con.executemany("insert into source values(?,?,?,?);", self)
         self._con.commit()
