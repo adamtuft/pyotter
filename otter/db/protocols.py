@@ -20,7 +20,6 @@ class TaskActionCallback(Protocol):
         action: TaskAction,
         time: str,
         location: SourceLocation,
-        unique: bool = False,
     ) -> None: ...
 
 

@@ -1,6 +1,6 @@
 -- Set up a database of tasks
 
--- List the tasks and their start/end times
+-- List the tasks
 create table task(
     id int unique not null,
 
@@ -24,25 +24,34 @@ create table task(
     -- foreign key (end_loc_id) references source (src_loc_id)
 );
 
--- List unique actions of each task e.g. create, start, end
-create table task_history_unique(
+-- List actions of each task, using partial keys to enforce uniqueness of some actions
+create table task_history(
     id int not null,       -- task ID
     action int not null,   -- 
     time not null,         -- time of action
     location_id,           -- source location
-    primary key (id, action)
     foreign key (id) references task (id)
 );
 
--- List non-unique actions of each task
-create table task_history_multi(
-    id int not null,       -- task ID
-    action int not null,   -- 
-    time not null,         -- time of action
-    location_id,           -- source location
-    primary key (id, action, time)
-    foreign key (id) references task (id)
-);
+create index idx_task_history_1
+on task_history(id, action)
+;
+
+-- Partial indexes to enforce uniqueness of create/start/end actions
+create unique index idx_task_history_crt
+on task_history(id)
+where action = 1 -- create
+;
+
+create unique index idx_task_history_start
+on task_history(id)
+where action = 2 -- start
+;
+
+create unique index idx_task_history_end
+on task_history(id)
+where action = 3 -- end
+;
 
 -- List metadata about each task-suspend action
 create table task_suspend_meta(
@@ -78,33 +87,6 @@ create table string(
     text,
     primary key (id)
 );
-
--- List each task synchronisation and the tasks it applies to
--- create table synchronisation(
---     context_id int not null,
---     task_id int not null,
---     primary key (context_id, task_id),
---     foreign key (task_id) references task (id),
---     foreign key (context_id) references context (context_id)
--- );
-
--- List the sync contexts in order within each task
--- create table chunk(
---     encountering_task_id int not null,
---     context_id int not null,
---     sequence int not null,
---     primary key (encountering_task_id, context_id, sequence),
---     foreign key (encountering_task_id) references task (id),
---     foreign key (context_id) references context (context_id)
--- );
-
--- Metadata about each task synchronisation context
--- create table context(
---     context_id int not null,
---     sync_descendants int not null,
---     sync_ts,
---     primary key (context_id)
--- );
 
 -- List the location_ref and local event positions contained in each chunk
 create table chunk_contents(

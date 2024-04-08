@@ -218,7 +218,6 @@ class BaseEventModel(ABC):
                     TaskAction.CREATE,
                     str(event.time),
                     task.init_location,
-                    unique=True,
                 )
             if self.is_update_task_start_ts_event(event):
                 add_task_action_cbk(
@@ -226,7 +225,6 @@ class BaseEventModel(ABC):
                     TaskAction.START,
                     str(event.time),
                     self.get_source_location(event),
-                    unique=True,
                 )
             if self.is_task_complete_event(event):
                 add_task_action_cbk(
@@ -234,7 +232,6 @@ class BaseEventModel(ABC):
                     TaskAction.END,
                     str(event.time),
                     self.get_source_location(event),
-                    unique=True,
                 )
             if self.is_task_suspend_event(event):
                 add_task_action_cbk(
