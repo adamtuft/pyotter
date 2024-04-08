@@ -3,7 +3,6 @@ from __future__ import annotations
 import sqlite3
 from typing import (
     Generator,
-    Iterable,
     List,
     Tuple,
     Union,
@@ -75,52 +74,36 @@ class Connection(sqlite3.Connection):
             print(row_format.format(table_or_view, name, count))
 
     def num_tasks(self) -> int:
-        cur = self.cursor()
-        cur.execute("select count(*) as num_tasks from task")
-        return cur.fetchone()["num_tasks"]
-
-    def task_ids(self) -> Iterable[int]:
-        cur = self.cursor()
-        cur.execute("select id from task order by rowid")
-        while True:
-            row = cur.fetchone()
-            if row is None:
-                break
-            yield row["id"]
+        (count,) = self.execute("select count(*) from task").fetchone()
+        return count
 
     def root_tasks(self) -> Tuple[int]:
         return (0,)
 
     def num_children(self, task: int) -> int:
-        cur = self.cursor()
-        query = (
-            "select count(*) as num_children from task_relation where parent_id in (?)"
-        )
-        return cur.execute(query, (task,)).fetchone()[0]
+        query = "select count(*) from task_relation where parent_id in (?)"
+        (count,) = self.execute(query, (task,)).fetchone()
+        return count
 
     def children_of(self, parent: int) -> List[int]:
-        cur = self.cursor()
         query = "select child_id from task_relation where parent_id in (?)"
-        return [r["child_id"] for r in cur.execute(query, (parent,)).fetchall()]
+        cur = self.execute(query, (parent,))
+        return [task for (task,) in cur]
 
     def ancestors_of(self, task: int) -> List[int]:
-        cur = self.cursor()
-        cur.execute(scripts.get_ancestors, (task,))
-        return [row["id"] for row in cur.fetchall()]
+        cur = self.execute(scripts.get_ancestors, (task,))
+        return [task for (task,) in cur]
 
     def descendants_of(self, task: int) -> List[int]:
-        cur = self.cursor()
-        cur.execute(scripts.get_descendants, (task,))
-        return [row["id"] for row in cur.fetchall()]
+        cur = self.execute(scripts.get_descendants, (task,))
+        return [task for (task,) in cur]
 
     def task_attributes(self, tasks: Union[int, Sequence[int]]) -> List[TaskAttributes]:
         if isinstance(tasks, int):
             tasks = (tasks,)
         placeholder = ",".join("?" for _ in tasks)
-        query_str = (
-            f"select * from task_attributes where id in ({placeholder}) order by id\n"
-        )
-        cur = self.execute(query_str, tuple(tasks))
+        query = f"select * from task_attributes where id in ({placeholder}) order by id"
+        cur = self.execute(query, tuple(tasks))
         return list(TaskAttributes(*row) for row in cur)
 
     def parent_child_attributes(
@@ -133,7 +116,6 @@ class Connection(sqlite3.Connection):
             (TaskDescriptor(*row[0:11]), TaskDescriptor(*row[11:22]), row[22])
             for row in cur
         ]
-        otter.log.debug("got %d rows", len(results))
         return results
 
     def source_locations(self) -> List[Tuple[int, SourceLocation]]:
@@ -145,7 +127,6 @@ class Connection(sqlite3.Connection):
                 "select src_loc_id, file_name, func_name, line from source_location order by file_name, line"
             )
         ]
-        otter.log.debug("got %d source locations", len(results))
         return results
 
     def task_types(self) -> Generator[Tuple[TaskDescriptor, int], None, None]:
@@ -160,7 +141,8 @@ class Connection(sqlite3.Connection):
         query = scripts.get_task_scheduling_states.format(
             placeholder=",".join("?" for task in tasks)
         )
-        return [TaskSchedulingState(*row) for row in self.execute(query, tasks)]
+        cur = self.execute(query, tasks)
+        return [TaskSchedulingState(*row) for row in cur]
 
     def task_suspend_meta(self, task: int) -> Tuple[Tuple[str, bool], ...]:
         """Return the metadata for each suspend event encountered by a task"""
@@ -177,4 +159,5 @@ class Connection(sqlite3.Connection):
         query = scripts.get_children_created_between.format(
             start_ts=start_ts, end_ts=end_ts
         )
-        return list(self.execute(query, (task,)))
+        cur = self.execute(query, (task,))
+        return list(cur)
