@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import os
 import sqlite3
+from functools import lru_cache
 from typing import (
     Generator,
     List,
@@ -26,7 +27,9 @@ from . import scripts
 class Connection(sqlite3.Connection):
     """Implements the connection to and operations on an Otter task database"""
 
-    def __init__(self, db: str, overwrite: bool = False, **kwargs):
+    def __init__(
+        self, db: str, overwrite: bool = False, initialise: bool = False, **kwargs
+    ):
         prefix = f"[{self.__class__.__name__}]"
         self.warning = otter.log.log_with_prefix(prefix, otter.log.warning)
         self.debug = otter.log.log_with_prefix(prefix, otter.log.debug)
@@ -39,12 +42,24 @@ class Connection(sqlite3.Connection):
             self.warning("overwriting tasks database %s", db)
             os.remove(db)
         super().__init__(db, **kwargs)
+        if initialise:
+            self.initialise()
 
-    def create_all(self):
+    def initialise(self):
         self.info(" -- create tables")
         self.executescript(scripts.create_tasks)
         self.info(" -- create views")
         self.executescript(scripts.create_views)
+        return self
+
+    def finalise(self):
+        self.info(" -- update task locations and timestamps")
+        self.executescript(scripts.update_task_locations_times)
+        self.info(" -- count children")
+        self.executescript(scripts.update_task_num_children)
+        self.info(" -- update source location definitions")
+        self.executescript(scripts.update_source_info)
+        return self
 
     def commit(self):
         self.debug("commit called")
@@ -113,9 +128,14 @@ class Connection(sqlite3.Connection):
         if isinstance(tasks, int):
             tasks = (tasks,)
         placeholder = ",".join("?" for _ in tasks)
-        query = f"select * from task_attributes where id in ({placeholder}) order by id"
+        query = scripts.get_task_attributes.format(placeholder=placeholder)
         cur = self.execute(query, tuple(tasks))
-        return list(TaskAttributes(*row) for row in cur)
+        results: List[TaskAttributes] = []
+        for row in cur:
+            results.append(
+                TaskAttributes(*row[0:8], *map(self.get_source_location, row[8:]))
+            )
+        return results
 
     def parent_child_attributes(
         self,
@@ -129,7 +149,18 @@ class Connection(sqlite3.Connection):
         ]
         return results
 
-    def source_locations(self) -> List[Tuple[int, SourceLocation]]:
+    @lru_cache(maxsize=1000)
+    def get_string(self, string_id: int) -> str:
+        (string,) = self.execute(scripts.get_string, (string_id,)).fetchone()
+        return string
+
+    @lru_cache(maxsize=1000)
+    def get_source_location(self, location_id: int) -> SourceLocation:
+        """Construct a source location from its id"""
+        row = self.execute(scripts.get_source_location, (location_id,)).fetchone()
+        return SourceLocation(*row)
+
+    def get_all_source_locations(self) -> List[Tuple[int, SourceLocation]]:
         """Get all the source locations defined in the trace"""
 
         results = [
