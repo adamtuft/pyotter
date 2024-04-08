@@ -58,7 +58,6 @@ class Project:
             log.error("no such file: %s", self.maps_file)
             raise SystemExit(1)
 
-        self.debug_dir = "debug_output"
         self.source_location_db = self.abspath(os.path.join(self.aux_dir, "srcloc.db"))
         self.tasks_db = self.abspath(os.path.join(self.aux_dir, "tasks.db"))
         self.return_addresses: Set[int] = set()
@@ -74,10 +73,10 @@ class Project:
         """Get the absolute path of an internal folder"""
         return os.path.abspath(os.path.join(self.project_root, relname))
 
-    def connection(self) -> closing[db.Connection]:
+    def connection(self, close: bool = True, overwrite: bool = False):
         """Return a connection to this project's tasks db for use in a with-block"""
-
-        return closing(db.Connection(self.tasks_db))
+        con = db.Connection(self.tasks_db, overwrite=overwrite)
+        return closing(con) if close else con
 
 
 class UnpackTraceProject(Project):
@@ -88,28 +87,11 @@ class UnpackTraceProject(Project):
         self.source_location_id: Dict[SourceLocation, int] = LabellingDict()
         self.string_id: Dict[str, int] = LabellingDict()
 
-    def prepare_environment(self) -> None:
-        """Prepare the environment - create any folders, databases, etc required by the project"""
-
-        debug_dir = self.abspath(self.debug_dir)
-        log.info("preparing environment")
-        if self.debug:
-            if not os.path.exists(debug_dir):
-                os.mkdir(debug_dir)
-        if os.path.exists(self.tasks_db):
-            log.warning("overwriting tasks database %s", self.tasks_db)
-            os.remove(self.tasks_db)
-        else:
-            log.info("creating tasks database %s", self.tasks_db)
-        with self.connection() as con:
-            log.info(" -- create tables")
-            con.executescript(db.scripts.create_tasks)
-            log.info(" -- create views")
-            con.executescript(db.scripts.create_views)
-        log.info("created database %s", self.tasks_db)
-
     def process_trace(self, con: otter.db.Connection):
         """Read a trace and create a database of tasks"""
+
+        con.create_all()
+        log.info("created database %s", self.tasks_db)
 
         log.info("processing trace")
 
@@ -443,8 +425,7 @@ def unpack_trace(anchorfile: str, debug: bool = False) -> None:
     log.info("using OTF2 python version %s", otf2_ext.version)
 
     project = UnpackTraceProject(anchorfile, debug=debug)
-    project.prepare_environment()
-    with project.connection() as con:
+    with project.connection(overwrite=True) as con:
         project.process_trace(con)
         con.print_summary()
 
