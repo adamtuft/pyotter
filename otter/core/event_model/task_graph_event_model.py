@@ -149,7 +149,6 @@ class TaskGraphEventModel(BaseEventModel):
         return TaskData(
             event.unique_id,
             event.encountering_task_id,
-            42,
             event.task_label,
             event.time,
             SourceLocation(event.source_file, event.source_func, event.source_line),

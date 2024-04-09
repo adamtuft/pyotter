@@ -143,7 +143,7 @@ class Connection(sqlite3.Connection):
         query = scripts.get_task_attributes.format(placeholder=placeholder)
         cur = self.execute(query, tuple(tasks))
         results = [
-            Task(*row[0:8], *map(self.get_source_location, row[8:])) for row in cur
+            Task(*row[0:7], *map(self.get_source_location, row[7:])) for row in cur
         ]
         return results
 

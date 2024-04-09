@@ -34,13 +34,12 @@ class TaskAttributes:  # For use in Connection.parent_child_attributes
     # Describes the invariant attributes of a task i.e. those compiled into the annotations
 
     label: str
-    flavour: int
     init_location: SourceLocation
     start_location: SourceLocation
     end_location: SourceLocation
 
     def is_null(self) -> bool:
-        return self.label is None and self.flavour is None
+        return self.label is None
 
     def asdict(self):
         return asdict(self)
@@ -53,7 +52,6 @@ class Task:
     id: int
     parent: int
     children: int
-    flavour: InitVar[int]
     create_ts: str
     start_ts: str
     end_ts: str
@@ -65,17 +63,15 @@ class Task:
 
     def __post_init__(
         self,
-        flavour: int,
         label: str,
         init_location: SourceLocation,
         start_location: SourceLocation,
         end_location: SourceLocation,
     ) -> None:
         super().__setattr__(
-            "descriptor",
+            "attr",
             TaskAttributes(
                 label,
-                flavour,
                 init_location,
                 start_location,
                 end_location,

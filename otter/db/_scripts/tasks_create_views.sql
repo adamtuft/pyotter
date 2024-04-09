@@ -91,12 +91,10 @@ create view if not exists task_attributes as
     select task.id
         ,parent.parent_id
         ,count(children.child_id) as num_children
-        ,task.flavour
         ,string.text as task_label
         ,crt.time as create_ts
         ,start.time as start_ts
         ,end.time as end_ts
-        -- ,task.duration
         ,create_loc.file as create_file
         ,create_loc.func as create_func
         ,create_loc.line as create_line

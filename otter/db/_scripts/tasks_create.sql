@@ -5,7 +5,6 @@ create table task(
     id int unique not null,
     parent_id int,
     num_children int,     -- set during finalisation
-    flavour int,
     user_label int,
     create_ts,            -- set during finalisation        
     start_ts,             -- set during finalisation       

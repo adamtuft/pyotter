@@ -23,20 +23,17 @@ class DBTaskMetaWriter:
         )
         self._string_id_lookup = string_id_lookup
         self._task_meta = BufferedDBWriter(
-            con, "task", 11, bufsize=bufsize, overwrite=overwrite
+            con, "task", 10, bufsize=bufsize, overwrite=overwrite
         )
         self._task_links = BufferedDBWriter(
             con, "task_relation", 2, bufsize=bufsize, overwrite=overwrite
         )
 
-    def add_task_metadata(
-        self, task: int, parent: Optional[int], label: str, flavour: int = -1
-    ) -> None:
+    def add_task_metadata(self, task: int, parent: Optional[int], label: str) -> None:
         self._task_meta.insert(
             task,
             parent,
             None,
-            flavour,
             self._string_id_lookup[label],
             None,
             None,

@@ -9,7 +9,6 @@ from otter.db.types import SourceLocation
 class TaskData:
     id: int
     parent_id: int
-    task_flavour: int
     task_label: str
     crt_ts: int
     init_location: SourceLocation

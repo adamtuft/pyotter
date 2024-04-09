@@ -4,7 +4,6 @@
 select task.id
     ,task.parent_id
     ,task.num_children
-    ,task.flavour
     ,task.create_ts
     ,task.start_ts
     ,task.end_ts
