@@ -1,5 +1,9 @@
 -- Create indexes on tables
 
+create unique index idx_task_relation_1
+on task_relation(parent_id, child_id)
+;
+
 create index idx_task_history_1
 on task_history(id, action)
 ;
