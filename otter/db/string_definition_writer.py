@@ -24,5 +24,8 @@ class DBStringDefinitionWriter:
 
     def close(self):
         self.debug("closing...")
+        if otter.log.is_debug_enabled():
+            for key, value in self:
+                self.debug(f"{key=}, {value=}")
         self._con.executemany("insert into string values(?,?);", self)
         self._con.commit()
