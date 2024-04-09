@@ -9,8 +9,10 @@ select events_left.id
 	,events_left.action as action_start
 	,events_right.action as action_end
 	,src_left.file_name as file_name_start
+	,src_left.func_name as func_name_start
 	,src_left.line as line_start
 	,src_right.file_name as file_name_end
+	,src_right.func_name as func_name_end
 	,src_right.line as line_end
 	,events_left.time as start_ts
 	,events_right.time as end_ts

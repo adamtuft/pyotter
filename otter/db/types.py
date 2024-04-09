@@ -13,20 +13,46 @@ class SourceLocation(NamedTuple):
         return f"{self.file}:{self.line} in {self.func}"
 
 
-class TaskSchedulingState(NamedTuple):
+@dataclass(frozen=True)
+class TaskSchedulingState:
     task: int
     action_start: int
     action_end: int
-    file_name_start: str
-    line_start: int
-    file_name_end: str
-    line_end: int
+    file_name_start: InitVar[str]
+    func_name_start: InitVar[str]
+    line_start: InitVar[int]
+    file_name_end: InitVar[str]
+    func_name_end: InitVar[str]
+    line_end: InitVar[int]
     start_ts: str
     end_ts: str
     duration: int
+    start_location: SourceLocation = field(init=False)
+    end_location: SourceLocation = field(init=False)
+
+    def __post_init__(
+        self,
+        file_name_start: str,
+        func_name_start: str,
+        line_start: int,
+        file_name_end: str,
+        func_name_end: str,
+        line_end: int,
+    ) -> None:
+        super().__setattr__(
+            "start_location",
+            SourceLocation(file_name_start, func_name_start, line_start),
+        )
+        super().__setattr__(
+            "end_location",
+            SourceLocation(file_name_end, func_name_end, line_end),
+        )
 
     def __str__(self) -> str:
-        return f"{self.__class__.__name__}(task={self.task}, {TaskAction(self.action_start)}:{self.start_ts} -> {TaskAction(self.action_end)}:{self.end_ts})"
+        return f"{self.__class__.__name__}(task={self.task}, {TaskAction(self.action_start)}:{self.start_location} at {self.start_ts} -> {TaskAction(self.action_end)}:{self.start_location} at {self.end_ts})"
+
+    def asdict(self):
+        return asdict(self)
 
 
 @dataclass(frozen=True)
