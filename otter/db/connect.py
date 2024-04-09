@@ -47,7 +47,9 @@ class Connection(sqlite3.Connection):
 
     def initialise(self):
         self.info(" -- create tables")
-        self.executescript(scripts.create_tasks)
+        self.executescript(scripts.create_tables)
+        self.info(" -- create indexes")
+        self.executescript(scripts.create_indexes)
         self.info(" -- create views")
         self.executescript(scripts.create_views)
         return self
