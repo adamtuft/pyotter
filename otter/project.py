@@ -164,8 +164,8 @@ class UnpackTraceProject(Project):
             # definitions get generated first, then flushed when the writers
             # are closed
             with closing_all(
-                source_writer,
                 string_writer,
+                source_writer,
                 chunk_builder,
                 task_meta_writer,
                 task_action_writer,
