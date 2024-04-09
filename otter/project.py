@@ -20,7 +20,7 @@ from otter.db import (
     DBSourceLocationWriter,
     DBStringDefinitionWriter,
 )
-from otter.db.types import SourceLocation, TaskDescriptor
+from otter.db.types import SourceLocation, TaskAttributes
 from otter.utils.context import closing_all
 
 from . import db, reporting
@@ -200,26 +200,26 @@ class BuildGraphFromDB(Project):
 
         graph = ig.Graph(directed=True)
 
-        (parent_attr,) = con.task_attributes((task,))
-        task_descriptor = parent_attr.descriptor
+        (parent,) = con.task_attributes((task,))
+        task_descriptor = parent.attr
 
         # create head & tail vertices
         head = graph.add_vertex(
             shape="plain",
             style="filled",
             attr={
-                "id": parent_attr.id,
+                "id": parent.id,
                 "label": task_descriptor.label,
                 "created": task_descriptor.init_location,
                 "start": task_descriptor.start_location,
-                "children": parent_attr.children,
+                "children": parent.children,
             },
         )
         tail = graph.add_vertex(
             shape="plain",
             style="filled",
             attr={
-                "id": parent_attr.id,
+                "id": parent.id,
                 "label": task_descriptor.label,
                 "end": task_descriptor.end_location,
             },
@@ -262,8 +262,8 @@ class BuildGraphFromDB(Project):
                         style="filled",
                         attr={
                             "id": child.id,
-                            "label": child.descriptor.label,
-                            "created": child.descriptor.init_location,
+                            "label": child.attr.label,
+                            "created": child.attr.init_location,
                             "children": child.children,
                         },
                     )
@@ -399,7 +399,7 @@ class BuildGraphFromDB(Project):
                 attributes = task_attributes[label_item]
                 # Have id as the first item in the dict
                 data: dict[str, Any] = {"id": attributes.id}
-                data.update(attributes.descriptor.asdict())
+                data.update(attributes.attr.asdict())
                 vertex["label"] = reporting.as_html_table(data)
                 r, g, b = (int(x * 256) for x in colour[data["label"]])
                 vertex["color"] = f"#{r:02x}{g:02x}{b:02x}"
@@ -445,7 +445,7 @@ def show_task_hierarchy(anchorfile: str, dotfile: str, debug: bool = False) -> N
     log.debug("project=%s", project)
 
     graph = ig.Graph(directed=True)
-    vertices: dict[TaskDescriptor, ig.Vertex] = defaultdict(
+    vertices: dict[TaskAttributes, ig.Vertex] = defaultdict(
         lambda: graph.add_vertex(shape="plain", style="filled")
     )
 

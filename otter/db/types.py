@@ -30,7 +30,7 @@ class TaskSchedulingState(NamedTuple):
 
 
 @dataclass(frozen=True)
-class TaskDescriptor:  # For use in Connection.parent_child_attributes
+class TaskAttributes:  # For use in Connection.parent_child_attributes
     # Describes the invariant attributes of a task i.e. those compiled into the annotations
 
     label: str
@@ -47,9 +47,8 @@ class TaskDescriptor:  # For use in Connection.parent_child_attributes
 
 
 @dataclass(frozen=True)
-class TaskAttributes:
-    # Describes the variant (runtime-dependent) and invariant attributes of a task
-    # Contains the fields returned by the `task_attributes` view
+class Task:
+    # Represents a row in the task table
 
     id: int
     parent: int
@@ -62,7 +61,7 @@ class TaskAttributes:
     init_location: InitVar[SourceLocation]
     start_location: InitVar[SourceLocation]
     end_location: InitVar[SourceLocation]
-    descriptor: TaskDescriptor = field(init=False)
+    attr: TaskAttributes = field(init=False)
 
     def __post_init__(
         self,
@@ -74,7 +73,7 @@ class TaskAttributes:
     ) -> None:
         super().__setattr__(
             "descriptor",
-            TaskDescriptor(
+            TaskAttributes(
                 label,
                 flavour,
                 init_location,
@@ -84,7 +83,7 @@ class TaskAttributes:
         )
 
     def is_null(self) -> bool:
-        return self.descriptor.is_null()
+        return self.attr.is_null()
 
     def asdict(self):
         return asdict(self)

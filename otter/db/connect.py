@@ -16,8 +16,8 @@ import otter.log
 
 from .types import (
     SourceLocation,
-    TaskDescriptor,
     TaskAttributes,
+    Task,
     TaskSchedulingState,
 )
 
@@ -124,27 +124,23 @@ class Connection(sqlite3.Connection):
         cur = self.execute(scripts.get_descendants, (task,))
         return [task for (task,) in cur]
 
-    def task_attributes(self, tasks: Union[int, Sequence[int]]) -> List[TaskAttributes]:
+    def task_attributes(self, tasks: Union[int, Sequence[int]]) -> List[Task]:
         if isinstance(tasks, int):
             tasks = (tasks,)
         placeholder = ",".join("?" for _ in tasks)
         query = scripts.get_task_attributes.format(placeholder=placeholder)
         cur = self.execute(query, tuple(tasks))
-        results: List[TaskAttributes] = []
-        for row in cur:
-            results.append(
-                TaskAttributes(*row[0:8], *map(self.get_source_location, row[8:]))
-            )
+        results = [Task(*row[0:8], *map(self.get_source_location, row[8:])) for row in cur]
         return results
 
     def parent_child_attributes(
         self,
-    ) -> List[Tuple[TaskDescriptor, TaskDescriptor, int]]:
+    ) -> List[Tuple[TaskAttributes, TaskAttributes, int]]:
         """Return tuples of task attributes for each parent-child link and the number of such links"""
 
         cur = self.execute(scripts.count_children_by_parent_attributes)
         results = [
-            (TaskDescriptor(*row[0:11]), TaskDescriptor(*row[11:22]), row[22])
+            (TaskAttributes(*row[0:11]), TaskAttributes(*row[11:22]), row[22])
             for row in cur
         ]
         return results
@@ -171,11 +167,11 @@ class Connection(sqlite3.Connection):
         ]
         return results
 
-    def task_types(self) -> Generator[Tuple[TaskDescriptor, int], None, None]:
+    def task_types(self) -> Generator[Tuple[TaskAttributes, int], None, None]:
         """Return task attributes for each distinct set of task attributes and the number of such records"""
 
         cur = self.execute(scripts.count_tasks_by_attributes)
-        return ((TaskDescriptor(row[0], -1, *row[1:10]), row[10]) for row in cur)
+        return ((TaskAttributes(row[0], -1, *row[1:10]), row[10]) for row in cur)
 
     def task_scheduling_states(self, tasks: Tuple[int]) -> List[TaskSchedulingState]:
         """Return 1 row per task scheduling state during the task's lifetime"""
