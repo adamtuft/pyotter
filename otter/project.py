@@ -200,7 +200,7 @@ class BuildGraphFromDB(Project):
 
         graph = ig.Graph(directed=True)
 
-        (parent,) = con.task_attributes((task,))
+        (parent,) = con.get_tasks((task,))
         task_descriptor = parent.attr
 
         # create head & tail vertices
@@ -255,7 +255,7 @@ class BuildGraphFromDB(Project):
                     )
                 ]
             else:
-                children = con.task_attributes([child for child, _ in tasks_created])
+                children = con.get_tasks([child for child, _ in tasks_created])
                 child_vertices = [
                     graph.add_vertex(
                         shape="plain",
@@ -388,9 +388,7 @@ class BuildGraphFromDB(Project):
         # For vertices where the key is int, assume it indicates a task and get
         # all such tasks' attributes
         task_id_labels = [x for x in label_data if isinstance(x, int)]
-        task_attributes = {
-            attr.id: attr for attr in con.task_attributes(task_id_labels)
-        }
+        task_attributes = {attr.id: attr for attr in con.get_tasks(task_id_labels)}
         for label_item, vertex in zip(label_data, graph.vs):
             if label_item is None:
                 vertex["label"] = ""

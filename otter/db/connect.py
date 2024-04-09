@@ -124,15 +124,6 @@ class Connection(sqlite3.Connection):
         cur = self.execute(scripts.get_descendants, (task,))
         return [task for (task,) in cur]
 
-    def task_attributes(self, tasks: Union[int, Sequence[int]]) -> List[Task]:
-        if isinstance(tasks, int):
-            tasks = (tasks,)
-        placeholder = ",".join("?" for _ in tasks)
-        query = scripts.get_task_attributes.format(placeholder=placeholder)
-        cur = self.execute(query, tuple(tasks))
-        results = [Task(*row[0:8], *map(self.get_source_location, row[8:])) for row in cur]
-        return results
-
     def parent_child_attributes(
         self,
     ) -> List[Tuple[TaskAttributes, TaskAttributes, int]]:
@@ -142,6 +133,17 @@ class Connection(sqlite3.Connection):
         results = [
             (TaskAttributes(*row[0:11]), TaskAttributes(*row[11:22]), row[22])
             for row in cur
+        ]
+        return results
+
+    def get_tasks(self, tasks: Union[int, Sequence[int]]) -> List[Task]:
+        if isinstance(tasks, int):
+            tasks = (tasks,)
+        placeholder = ",".join("?" for _ in tasks)
+        query = scripts.get_task_attributes.format(placeholder=placeholder)
+        cur = self.execute(query, tuple(tasks))
+        results = [
+            Task(*row[0:8], *map(self.get_source_location, row[8:])) for row in cur
         ]
         return results
 
