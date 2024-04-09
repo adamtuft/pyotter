@@ -18,7 +18,7 @@ from otter.core.chunk_builder import (
     ChunkKeyDuplicateError,
 )
 from otter.core.events import Event, Location
-from otter.core.tasks import Task
+from otter.core.tasks import TaskData
 from otter.definitions import (
     Attr,
     EventModel,
@@ -144,9 +144,9 @@ class TaskGraphEventModel(BaseEventModel):
     def get_task_entered(event: Event) -> int:
         return event.encountering_task_id
 
-    def get_task_registered_data(self, event: Event) -> Task:
+    def get_task_registered_data(self, event: Event) -> TaskData:
         assert self.is_task_register_event(event)
-        return Task(
+        return TaskData(
             event.unique_id,
             event.encountering_task_id,
             42,

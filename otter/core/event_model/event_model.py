@@ -27,7 +27,7 @@ from otter.db.types import SourceLocation
 from otter.core.chunk_builder import ChunkBuilderProtocol
 from otter.core.chunks import Chunk
 from otter.core.events import Event, Location
-from otter.core.tasks import Task
+from otter.core.tasks import TaskData
 from otter.definitions import (
     EventModel,
     EventType,
@@ -271,7 +271,7 @@ class BaseEventModel(ABC):
         )
 
     @abstractmethod
-    def get_task_registered_data(self, event: Event) -> Task:
+    def get_task_registered_data(self, event: Event) -> TaskData:
         raise NotImplementedError()
 
     @abstractmethod

@@ -8,7 +8,7 @@ from typing import Any, Callable, Deque, Dict, List, Optional, Tuple
 from otter.db.types import SourceLocation
 from otter.core.chunks import Chunk, ChunkDict
 from otter.core.events import Event, Location
-from otter.core.tasks import Task
+from otter.core.tasks import TaskData
 from otter.definitions import (
     EventModel,
     EventType,
@@ -32,7 +32,7 @@ class OMPEventModel(BaseEventModel):
     def __init__(self, *args, **kwargs):
         super().__init__()
         # A dictionary mapping a single-exec or master-begin event to a list of tasks to be synchronised
-        self._task_sync_cache: Dict[Event, List[Task]] = defaultdict(list)
+        self._task_sync_cache: Dict[Event, List[TaskData]] = defaultdict(list)
 
     @classmethod
     def event_completes_chunk(cls, event: Event) -> bool:
@@ -160,11 +160,11 @@ class OMPEventModel(BaseEventModel):
             return event.encountering_task_id
 
     @classmethod
-    def get_task_data(cls, event: Event) -> Task:
+    def get_task_data(cls, event: Event) -> TaskData:
         # Only defined for RegisterTaskDataMixin classes
         # i.e. task-enter, task-create
         assert cls.is_task_register_event(event)
-        return Task(
+        return TaskData(
             event.unique_id,
             event.parent_task_id,
             event.task_flavour,

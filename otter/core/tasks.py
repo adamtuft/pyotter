@@ -6,7 +6,7 @@ from otter.db.types import SourceLocation
 
 
 @dataclass
-class Task:
+class TaskData:
     id: int
     parent_id: int
     task_flavour: int
