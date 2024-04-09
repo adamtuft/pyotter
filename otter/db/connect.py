@@ -136,16 +136,21 @@ class Connection(sqlite3.Connection):
         ]
         return results
 
+    def _make_task(self, row) -> Task:
+        """Make a task from its attributes and source location refs"""
+        return Task(*row[0:7], *map(self.get_source_location, row[7:]))
+
     def get_tasks(self, tasks: Union[int, Sequence[int]]) -> List[Task]:
         if isinstance(tasks, int):
             tasks = (tasks,)
         placeholder = ",".join("?" for _ in tasks)
         query = scripts.get_task_attributes.format(placeholder=placeholder)
-        cur = self.execute(query, tuple(tasks))
-        results = [
-            Task(*row[0:7], *map(self.get_source_location, row[7:])) for row in cur
-        ]
-        return results
+        return list(map(self._make_task, self.execute(query, tuple(tasks))))
+
+    @property
+    def tasks(self):
+        """An iterator over all tasks in the db"""
+        return map(self._make_task, self.execute(scripts.get_all_task_attributes))
 
     @lru_cache(maxsize=1000)
     def get_string(self, string_id: int) -> str:
