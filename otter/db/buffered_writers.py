@@ -59,24 +59,19 @@ class CritTaskWriter(BufferedDBWriter):
         return super().insert(task, sequence, critical_child)
 
 
-class ScheduleWriter:
+class ScheduleWriter(BufferedDBWriter):
 
     def __init__(
         self, con: Connection, bufsize: int = 1000, overwrite: bool = True
     ) -> None:
-        self._writer_unique = BufferedDBWriter(
-            con, "_sim_task_history_unique", 4, bufsize=1000, overwrite=True
-        )
-        self._writer_multi = BufferedDBWriter(
-            con, "_sim_task_history_multi", 4, bufsize=1000, overwrite=True
-        )
+        super().__init__(con, "sim_task_history", 4, bufsize, overwrite)
 
-    def insert(self, task: int, action: TaskAction, event_ts: int, /, *args):
-        if action in (TaskAction.CREATE, TaskAction.START, TaskAction.END):
-            self._writer_unique.insert(task, action.value, event_ts, -1)
-        else:
-            self._writer_multi.insert(task, action.value, event_ts, -1)
-
-    def close(self):
-        self._writer_multi.close()
-        self._writer_unique.close()
+    def insert(
+        self,
+        task: int,
+        action: TaskAction,
+        event_ts: int,
+        /,
+        *args,
+    ):
+        super().insert(task, action.value, event_ts, -1)

@@ -87,22 +87,20 @@ create table critical_task(
 --
 --------------------------------------------------------------------------------
 
--- List unique actions of each task e.g. create, start, end
-create table _sim_task_history_unique(
+-- List actions of each task, using partial keys to enforce uniqueness of some actions
+create table sim_task_history(
     id int not null,       -- task ID
     action int not null,   -- 
     time not null,         -- time of action
     location_id,           -- source location
-    primary key (id, action)
     foreign key (id) references task (id)
 );
 
--- List non-unique actions of each task
-create table _sim_task_history_multi(
+-- List metadata about each task-suspend action in a simulated schedule
+create table sim_task_suspend_meta(
     id int not null,       -- task ID
-    action int not null,   -- 
     time not null,         -- time of action
-    location_id,           -- source location
-    primary key (id, action, time)
+    sync_descendants int not null,
+    primary key (id, time)
     foreign key (id) references task (id)
 );
