@@ -11,4 +11,4 @@ class TaskData:
     parent_id: int
     task_label: str
     crt_ts: int
-    init_location: SourceLocation
+    create_location: SourceLocation

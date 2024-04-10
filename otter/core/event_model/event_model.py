@@ -217,7 +217,7 @@ class BaseEventModel(ABC):
                     task.id,
                     TaskAction.CREATE,
                     str(event.time),
-                    task.init_location,
+                    task.create_location,
                 )
             if self.is_update_task_start_ts_event(event):
                 add_task_action_cbk(
