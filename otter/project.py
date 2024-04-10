@@ -210,7 +210,7 @@ class BuildGraphFromDB(Project):
             attr={
                 "id": parent.id,
                 "label": task_descriptor.label,
-                "created": task_descriptor.init_location,
+                "created": task_descriptor.create_location,
                 "start": task_descriptor.start_location,
                 "children": parent.children,
             },
@@ -263,7 +263,7 @@ class BuildGraphFromDB(Project):
                         attr={
                             "id": child.id,
                             "label": child.attr.label,
-                            "created": child.attr.init_location,
+                            "created": child.attr.create_location,
                             "children": child.children,
                         },
                     )
@@ -461,7 +461,14 @@ def show_task_hierarchy(anchorfile: str, dotfile: str, debug: bool = False) -> N
 
     colour = reporting.colour_picker(cycle=True)
     for task, vertex in vertices.items():
-        vertex["label"] = reporting.as_html_table(task.asdict())
+        vertex["label"] = reporting.as_html_table(
+            task.asdict(),
+            rename_keys={
+                "create_location": "created",
+                "start_location": "start",
+                "end_location": "end",
+            },
+        )
         r, g, b = (int(x * 256) for x in colour[task.label])
         vertex["color"] = f"#{r:02x}{g:02x}{b:02x}"
 
@@ -544,7 +551,7 @@ def summarise_tasks_db(
                 print(f"Count: {num_tasks}")
                 print("Data:")
                 print(f"  label:    {descriptor.label}")
-                print(f"  created:  {descriptor.init_location}")
+                print(f"  created:  {descriptor.create_location}")
                 print(f"  start:    {descriptor.start_location}")
                 print(f"  end:      {descriptor.end_location}")
                 print()
