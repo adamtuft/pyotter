@@ -126,6 +126,16 @@ class Connection(sqlite3.Connection):
         cur = self.execute(scripts.get_descendants, (task,))
         return [task for (task,) in cur]
 
+    def _make_task_attr(
+        self, label: str, create: int, start: int, end: int
+    ) -> TaskAttributes:
+        return TaskAttributes(
+            label,
+            self.get_source_location(create),
+            self.get_source_location(start),
+            self.get_source_location(end),
+        )
+
     def parent_child_attributes(
         self,
     ) -> List[Tuple[TaskAttributes, TaskAttributes, int]]:
@@ -133,7 +143,7 @@ class Connection(sqlite3.Connection):
 
         cur = self.execute(scripts.count_children_by_parent_attributes)
         results = [
-            (TaskAttributes(*row[0:11]), TaskAttributes(*row[11:22]), row[22])
+            (self._make_task_attr(*row[0:4]), self._make_task_attr(*row[4:8]), row[8])
             for row in cur
         ]
         return results

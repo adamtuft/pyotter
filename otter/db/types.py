@@ -60,7 +60,7 @@ class TaskAttributes:  # For use in Connection.parent_child_attributes
     # Describes the invariant attributes of a task i.e. those compiled into the annotations
 
     label: str
-    init_location: SourceLocation
+    create_location: SourceLocation
     start_location: SourceLocation
     end_location: SourceLocation
 
@@ -82,7 +82,7 @@ class Task:
     start_ts: str
     end_ts: str
     label: InitVar[str]
-    init_location: InitVar[SourceLocation]
+    create_location: InitVar[SourceLocation]
     start_location: InitVar[SourceLocation]
     end_location: InitVar[SourceLocation]
     attr: TaskAttributes = field(init=False)
@@ -90,7 +90,7 @@ class Task:
     def __post_init__(
         self,
         label: str,
-        init_location: SourceLocation,
+        create_location: SourceLocation,
         start_location: SourceLocation,
         end_location: SourceLocation,
     ) -> None:
@@ -98,7 +98,7 @@ class Task:
             "attr",
             TaskAttributes(
                 label,
-                init_location,
+                create_location,
                 start_location,
                 end_location,
             ),
