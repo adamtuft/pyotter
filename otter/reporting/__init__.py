@@ -63,11 +63,18 @@ def colour_picker(cycle: bool = False):
     return defaultdict(lambda: next(colour_iter))
 
 
-def as_html_table(content: dict, table_attr: Optional[dict] = None) -> str:
+def as_html_table(
+    content: dict, table_attr: Optional[dict] = None, rename_keys: Optional[dict] = None
+) -> str:
     """Convert a task's attributes into a formatted html-like graphviz table"""
 
     if table_attr is None:
         table_attr = {"td": {"align": "left", "cellpadding": "6px"}}
+    if rename_keys is not None:
+        for oldkey, newkey in rename_keys.items():
+            if oldkey in content:
+                content[newkey] = content[oldkey]
+                del content[oldkey]
     label_body = graphviz_record_table(content, table_attr=table_attr)
     return f"<{label_body}>"
 
