@@ -86,7 +86,7 @@ create view if not exists task_location as
         ,type
 ;
 
--- A readable view of a task's attributes (flavour, label, etc)
+-- A readable view of a task's attributes (label, etc)
 create view if not exists task_attributes as
     select task.id
         ,parent.parent_id
