@@ -17,5 +17,4 @@ def _find_dot_or_die():
 
 _find_dot_or_die()
 
-# TODO: can I remove these top-level imports so that I can import separate components as needed instead?
 from . import args, core, main, profile, project, reporting, utils, db
