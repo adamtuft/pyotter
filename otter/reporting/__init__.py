@@ -119,7 +119,7 @@ def write_graph_to_file(
 
 
 def convert_dot_to_svg(
-    dotfile: str, svgfile: str = "", rankdir: Literal["LR", "TB"] = "TB"
+    *, dotfile: str, svgfile: str = "", rankdir: str
 ) -> Tuple[int, str, str, str]:
     """Invoke dot to convert .dot to .svg"""
 
