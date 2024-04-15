@@ -8,11 +8,13 @@ from typing import Any, AnyStr, Dict, List, Set
 
 import igraph as ig
 import otf2_ext
+from prettytable import PrettyTable
 
 import otter.log as log
 import otter.db
 import otter.simulator
 
+from otter.args import Summarise
 from otter.definitions import TaskAction, TraceAttr
 from otter.db import (
     DBTaskMetaWriter,
@@ -95,7 +97,9 @@ class UnpackTraceProject(Project):
         con.finalise()
         con.commit()
         if summarise:
-            con.print_summary()
+            table = PrettyTable(["Table/View", "Name", "Rows"], align="l")
+            table.add_rows(con.count_rows())
+            print(table)
         con.close()
 
     def process_trace(self, con: otter.db.Connection):
@@ -246,8 +250,8 @@ class BuildGraphFromDB(Project):
                     graph.add_vertex(
                         attr={
                             "tasks created": len(tasks_created),
-                            "start": f"{state.file_name_start}:{state.line_start}",
-                            "end": f"{state.file_name_end}:{state.line_end}",
+                            "start": f"{state.start_location}",
+                            "end": f"{state.end_location}",
                         },
                         shape="plain",
                         style="filled",
@@ -265,6 +269,7 @@ class BuildGraphFromDB(Project):
                             "label": child.attr.label,
                             "created": child.attr.create_location,
                             "children": child.children,
+                            "duration": int(child.end_ts) - int(child.start_ts),
                         },
                     )
                     for child in children
@@ -290,7 +295,7 @@ class BuildGraphFromDB(Project):
                     type="barrier",
                     attr={
                         "sync descendants": str(task_suspend_meta[state.end_ts]),
-                        "started": f"{state.file_name_end}:{state.line_end}",
+                        "started": f"{state.end_location}",
                         "ended": "?:?",
                     },
                 )
@@ -307,7 +312,7 @@ class BuildGraphFromDB(Project):
             elif actions == (TaskAction.RESUME, TaskAction.END):
                 debug_msg("task completed after barrier")
 
-                cur["attr"]["ended"] = f"{state.file_name_start}:{state.line_start}"
+                cur["attr"]["ended"] = f"{state.start_location}"
 
                 if child_vertices:
                     for v in child_vertices:
@@ -319,7 +324,7 @@ class BuildGraphFromDB(Project):
             elif actions == (TaskAction.RESUME, TaskAction.SUSPEND):
                 debug_msg("task resumed after barrier")
 
-                cur["attr"]["ended"] = f"{state.file_name_start}:{state.line_start}"
+                cur["attr"]["ended"] = f"{state.start_location}"
 
                 barrier_vertex = graph.add_vertex(
                     shape="octagon",
@@ -328,7 +333,7 @@ class BuildGraphFromDB(Project):
                     type="barrier",
                     attr={
                         "sync descendants": str(task_suspend_meta[state.end_ts]),
-                        "started": f"{state.file_name_end}:{state.line_end}",
+                        "started": f"{state.end_location}",
                         "ended": "?:?",
                     },
                 )
@@ -520,8 +525,78 @@ def show_control_flow_graph(
         log.info("cfg for task %d written to %s", task, svgfile)
 
 
+def show_task_tree(
+    anchorfile: str, dotfile: str, *, debug: bool = False, rankdir: str
+) -> None:
+
+    project = BuildGraphFromDB(anchorfile, debug=debug)
+    log.debug("project=%s", project)
+
+    graph = ig.Graph(directed=True)
+    vertices: dict[int, ig.Vertex] = defaultdict(
+        lambda: graph.add_vertex(shape="plain", style="filled")
+    )
+
+    label_counter = CountingDict(start=1)
+    colour = reporting.colour_picker(cycle=True)
+
+    with project.connection() as con:
+        for task in con.tasks:
+            # count the number of times we see each label
+            label_counter.increment(task.attr.label)
+            vertex = vertices[task.id]
+            label_data = {
+                "id": task.id,
+                "label": task.attr.label,
+                "created": task.attr.create_location,
+            }
+            vertex["label"] = reporting.as_html_table(label_data)
+            vertex["_task_label"] = task.attr.label
+            if task.parent is not None:
+                graph.add_edge(vertices[task.parent], vertex)
+
+    # for each label seen more than once, colour according to the label
+    for vertex in graph.vs:
+        task_label = vertex["_task_label"]
+        if label_counter[task_label] > 1:
+            r, g, b = (int(x * 256) for x in colour[task_label])
+            vertex["color"] = f"#{r:02x}{g:02x}{b:02x}"
+
+    del vertex["_task_label"]
+
+    num_vertices = len(graph.vs)
+    num_tasks = con.num_tasks()
+    if num_vertices != num_tasks:
+        log.error(
+            "number of tasks (%d) and vertices (%d) don't match!",
+            num_tasks,
+            num_vertices,
+        )
+    else:
+        log.debug(
+            "number of tasks (%d) and vertices (%d) match",
+            num_tasks,
+            num_vertices,
+        )
+
+    log.debug("writing dotfile: %s", dotfile)
+    reporting.write_graph_to_file(graph, filename=dotfile)
+
+    log.debug("converting dotfile to svg")
+    result, _, stderr, svgfile = reporting.convert_dot_to_svg(
+        dotfile=dotfile, rankdir=rankdir
+    )
+    if result != 0:
+        for line in stderr.splitlines():
+            print(line, file=sys.stderr)
+    else:
+        print(f"task tree written to {svgfile}")
+
+
 def summarise_tasks_db(
-    anchorfile: str, debug: bool = False, source: bool = False, tasks: bool = False
+    anchorfile: str,
+    summarise: Summarise,
+    debug: bool = False,
 ) -> None:
     """Print summary information about a tasks database"""
 
@@ -529,32 +604,20 @@ def summarise_tasks_db(
 
     with project.connection() as con:
 
-        title = f"=== SUMMARY OF {con.db} ==="
-        print("\n" + "=" * len(title))
-        print(title)
-        print("=" * len(title) + "\n\n")
+        if summarise == Summarise.ROWCOUNT:
+            con.print_row_count(sep="\t")
 
-        print("::: Tables/Views :::\n")
-        con.print_summary()
-        print()
+        elif summarise == Summarise.SOURCE:
+            con.print_source_locations(sep="\t")
 
-        if source:
-            print("::: Source Locations :::\n")
-            source_locations = con.get_all_source_locations()
-            for _, location in source_locations:
-                print(f"{location.file}:{location.line} in {location.func}")
-            print()
+        elif summarise == Summarise.STRINGS:
+            con.print_strings(sep="\t")
 
-        if tasks:
-            print("::: Task Types :::\n")
-            for descriptor, num_tasks in con.task_types():
-                print(f"Count: {num_tasks}")
-                print("Data:")
-                print(f"  label:    {descriptor.label}")
-                print(f"  created:  {descriptor.create_location}")
-                print(f"  start:    {descriptor.start_location}")
-                print(f"  end:      {descriptor.end_location}")
-                print()
+        elif summarise == Summarise.TASKS:
+            con.print_tasks(sep="\t")
+
+        else:
+            log.error("don't know how to summarise %s", summarise)
 
 
 def print_filter_to_stdout(include: bool, rules: List[List[str]]) -> None:

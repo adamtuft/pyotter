@@ -49,9 +49,16 @@ def _select_action(args) -> None:
                 otter.project.show_task_hierarchy(
                     args.anchorfile, args.dotfile, debug=debug
                 )
+            elif args.show == GraphType.TREE:
+                otter.project.show_task_tree(
+                    args.anchorfile, args.dotfile, debug=debug, rankdir=args.rankdir
+                )
+            else:
+                otter.log.error(f"unknown graph type: {args.show}")
+                raise SystemExit(1)
         elif args.action == Action.SUMMARY:
             otter.project.summarise_tasks_db(
-                args.anchorfile, debug=debug, source=args.source, tasks=args.tasks
+                args.anchorfile, args.summarise, debug=debug
             )
         elif args.action == Action.FILTER:
             otter.project.print_filter_to_stdout(

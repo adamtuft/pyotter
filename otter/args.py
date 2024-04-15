@@ -16,11 +16,21 @@ class Action(str, Enum):
     SIMULATE = "simulate"
 
 
+class Summarise(str, Enum):
+    """Things that can be shown in summary"""
+
+    ROWCOUNT = "rowcount"
+    SOURCE = "source"
+    TASKS = "tasks"
+    STRINGS = "strings"
+
+
 class GraphType(str, Enum):
     """Defines the graph types available to do_show()"""
 
     CFG = "cfg"  # control-flow graph
     HIER = "hier"  # task hierarchy
+    TREE = "tree"  # all tasks in a tree
 
 
 description_action = {
@@ -77,6 +87,7 @@ label:
 description_show = {
     GraphType.CFG: "show the control-flow graph of a chosen task",
     GraphType.HIER: "show the task hierarchy",
+    GraphType.TREE: "show the task tree",
 }
 
 filter_keys = ["label", "init", "start", "end"]
@@ -167,15 +178,12 @@ def prepare_parser_summary(parent: argparse._SubParsersAction[argparse.ArgumentP
         description=description_action[Action.SUMMARY],
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
     )
+    summary_choices = [opt.name.lower() for opt in Summarise]
     parse_action_summary.add_argument(
-        "--source",
-        action="store_true",
-        help="list the source locations recorded in the trace",
-    )
-    parse_action_summary.add_argument(
-        "--tasks",
-        action="store_true",
-        help="list the tasks recorded in the trace",
+        "summarise",
+        metavar="what",
+        type=Summarise,
+        help=f"what entity to summarise (choices: {', '.join(summary_choices)})",
     )
     add_anchorfile_argument(parse_action_summary)
     add_common_arguments(parse_action_summary)
@@ -235,6 +243,32 @@ def prepare_parser_show(parent: argparse._SubParsersAction[argparse.ArgumentPars
     )
     add_anchorfile_argument(parser_show_hier)
     add_common_arguments(parser_show_hier)
+
+    # parse the action "show tree"
+    parser_show_tree = subparse_action_show.add_parser(
+        GraphType.TREE.value,
+        help=description_show[GraphType.TREE],
+        description=description_show[GraphType.TREE],
+        formatter_class=argparse.ArgumentDefaultsHelpFormatter,
+    )
+    parser_show_tree.add_argument(
+        "-o",
+        "--out",
+        dest="dotfile",
+        metavar="dotfile",
+        help="where to save the graph",
+        default="tree.dot",
+    )
+    parser_show_tree.add_argument(
+        "--rankdir",
+        dest="rankdir",
+        metavar="rankdir",
+        help="the direction in which to plot the tree",
+        choices=["TB", "LR"],
+        required=True,
+    )
+    add_anchorfile_argument(parser_show_tree)
+    add_common_arguments(parser_show_tree)
 
 
 def prepare_parser_filter(parent: argparse._SubParsersAction[argparse.ArgumentParser]):
