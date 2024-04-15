@@ -14,6 +14,7 @@ dependencies = [
     "igraph",
     "otf2",
     "colorama",
+    "prettytable",
 ]
 license = { file = "LICENSE" }
 
