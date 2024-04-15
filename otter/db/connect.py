@@ -77,6 +77,29 @@ class Connection(sqlite3.Connection):
             callback()
         super().close()
 
+    def count_rows(self) -> List[Tuple[str, str, int]]:
+
+        otter.log.debug("try to read from sqlite_schema")
+        query = "select type, name from {table} where type in ('table', 'view') order by type, name"
+        rows: List[Tuple[str, str]]
+        try:
+            rows = self.execute(query.format(table="sqlite_schema")).fetchall()
+        except sqlite3.OperationalError as err:
+            otter.log.debug(err)
+            otter.log.debug("failed to read from sqlite_schema, try from sqlite_master")
+            rows = self.execute(query.format(table="sqlite_master")).fetchall()
+
+        counts: List[Tuple[str, str, int]]
+        counts = [
+            (
+                table_or_view,
+                name,
+                self.execute(f"select count(*) from {name}").fetchone()[0],
+            )
+            for (table_or_view, name) in rows
+        ]
+        return counts
+
     def print_summary(self) -> None:
         """Print summary information about the connected tasks database"""
 
@@ -186,11 +209,14 @@ class Connection(sqlite3.Connection):
         ]
         return results
 
+    def get_all_strings(self) -> List[Tuple[int, str]]:
+        return list(self.execute("select id, text from string order by id;"))
+
     def task_types(self) -> Generator[Tuple[TaskAttributes, int], None, None]:
         """Return task attributes for each distinct set of task attributes and the number of such records"""
 
         cur = self.execute(scripts.count_tasks_by_attributes)
-        return ((TaskAttributes(row[0], -1, *row[1:10]), row[10]) for row in cur)
+        return ((self._make_task_attr(*row[0:4]), row[4]) for row in cur)
 
     def task_scheduling_states(self, tasks: Tuple[int]) -> List[TaskSchedulingState]:
         """Return 1 row per task scheduling state during the task's lifetime"""
@@ -218,3 +244,26 @@ class Connection(sqlite3.Connection):
         )
         cur = self.execute(query, (task,))
         return list(cur)
+
+    def print_row_count(self, sep: str = " "):
+        for name, table_or_view, num_rows in self.count_rows():
+            print(table_or_view, name, num_rows, sep=sep)
+
+    def print_source_locations(self, sep: str = " "):
+        for location_id, location in self.get_all_source_locations():
+            print(location_id, location.file, location.line, location.func, sep=sep)
+
+    def print_strings(self, sep: str = " "):
+        for ref, string in self.get_all_strings():
+            print(ref, string, sep=sep)
+
+    def print_tasks(self, sep: str = " "):
+        for desc, num_tasks in self.task_types():
+            print(
+                num_tasks,
+                desc.label,
+                f"{desc.create_location.file}:{desc.create_location.line}",
+                f"{desc.start_location.file}:{desc.start_location.line}",
+                f"{desc.end_location.file}:{desc.end_location.line}",
+                sep=sep,
+            )

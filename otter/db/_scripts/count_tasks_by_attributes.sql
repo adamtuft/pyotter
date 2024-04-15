@@ -1,15 +1,12 @@
-select attr.task_label
-    ,attr.create_file
-    ,attr.create_func
-    ,attr.create_line
-    ,attr.start_file
-    ,attr.start_func
-    ,attr.start_line
-    ,attr.end_file
-    ,attr.end_func
-    ,attr.end_line
+select task_label.text
+    ,task.create_location
+    ,task.start_location
+    ,task.end_location
     ,count(*) as num_tasks
-from task_attributes as attr
-group by 1,2,3,4,5,6,7,8,9,10
+from task
+left join string as task_label
+    on task.user_label = task_label.id
+group by 1,2,3,4
 order by num_tasks desc
+    ,task_label.text
 ;
