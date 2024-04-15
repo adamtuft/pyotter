@@ -21,7 +21,7 @@ from .types import (
     TaskSchedulingState,
 )
 
-from . import scripts
+from .scripts import scripts
 
 
 class Connection(sqlite3.Connection):
@@ -47,20 +47,20 @@ class Connection(sqlite3.Connection):
 
     def initialise(self):
         self.info(" -- create tables")
-        self.executescript(scripts.create_tables)
+        self.executescript(scripts["create_tables"])
         self.info(" -- create indexes")
-        self.executescript(scripts.create_indexes)
+        self.executescript(scripts["create_indexes"])
         self.info(" -- create views")
-        self.executescript(scripts.create_views)
+        self.executescript(scripts["create_views"])
         return self
 
     def finalise(self):
         self.info(" -- update task locations and timestamps")
-        self.executescript(scripts.update_task_locations_times)
+        self.executescript(scripts["update_task_locations_times"])
         self.info(" -- count children")
-        self.executescript(scripts.update_task_num_children)
+        self.executescript(scripts["update_task_num_children"])
         self.info(" -- update source location definitions")
-        self.executescript(scripts.update_source_info)
+        self.executescript(scripts["update_source_info"])
         return self
 
     def commit(self):
@@ -79,15 +79,8 @@ class Connection(sqlite3.Connection):
 
     def count_rows(self) -> List[Tuple[str, str, int]]:
 
-        otter.log.debug("try to read from sqlite_schema")
-        query = "select type, name from {table} where type in ('table', 'view') order by type, name"
-        rows: List[Tuple[str, str]]
-        try:
-            rows = self.execute(query.format(table="sqlite_schema")).fetchall()
-        except sqlite3.OperationalError as err:
-            otter.log.debug(err)
-            otter.log.debug("failed to read from sqlite_schema, try from sqlite_master")
-            rows = self.execute(query.format(table="sqlite_master")).fetchall()
+        otter.log.debug("try to read from sqlite_master")
+        rows = self.execute(scripts["select_names_from_sqlite_master"]).fetchall()
 
         counts: List[Tuple[str, str, int]]
         counts = [
@@ -99,30 +92,6 @@ class Connection(sqlite3.Connection):
             for (table_or_view, name) in rows
         ]
         return counts
-
-    def print_summary(self) -> None:
-        """Print summary information about the connected tasks database"""
-
-        row_format = "{0:<8s} {1:27s} {2:>6d}"
-
-        otter.log.debug("try to read from sqlite_schema")
-        query = "select name, type from {table} where type in ('table', 'view') order by type, name"
-        rows: List[Tuple[str, str]]
-        try:
-            rows = self.execute(query.format(table="sqlite_schema")).fetchall()
-        except sqlite3.OperationalError as err:
-            otter.log.debug(err)
-            otter.log.debug("failed to read from sqlite_schema, try from sqlite_master")
-            rows = self.execute(query.format(table="sqlite_master")).fetchall()
-
-        header = "Type     Name                          Rows"
-        print(header)
-        print("-" * len(header))
-        for name, table_or_view in rows:
-            query_count_rows = f"select count(*) from {name}"
-            otter.log.debug(query_count_rows)
-            (count,) = self.execute(query_count_rows).fetchone()
-            print(row_format.format(table_or_view, name, count))
 
     def num_tasks(self) -> int:
         (count,) = self.execute("select count(*) from task").fetchone()
@@ -142,11 +111,11 @@ class Connection(sqlite3.Connection):
         return [task for (task,) in cur]
 
     def ancestors_of(self, task: int) -> List[int]:
-        cur = self.execute(scripts.get_ancestors, (task,))
+        cur = self.execute(scripts["get_ancestors"], (task,))
         return [task for (task,) in cur]
 
     def descendants_of(self, task: int) -> List[int]:
-        cur = self.execute(scripts.get_descendants, (task,))
+        cur = self.execute(scripts["get_descendants"], (task,))
         return [task for (task,) in cur]
 
     def _make_task_attr(
@@ -164,7 +133,7 @@ class Connection(sqlite3.Connection):
     ) -> List[Tuple[TaskAttributes, TaskAttributes, int]]:
         """Return tuples of task attributes for each parent-child link and the number of such links"""
 
-        cur = self.execute(scripts.count_children_by_parent_attributes)
+        cur = self.execute(scripts["count_children_by_parent_attributes"])
         results = [
             (self._make_task_attr(*row[0:4]), self._make_task_attr(*row[4:8]), row[8])
             for row in cur
@@ -179,23 +148,23 @@ class Connection(sqlite3.Connection):
         if isinstance(tasks, int):
             tasks = (tasks,)
         placeholder = ",".join("?" for _ in tasks)
-        query = scripts.get_task_attributes.format(placeholder=placeholder)
+        query = scripts["get_task_attributes"].format(placeholder=placeholder)
         return list(map(self._make_task, self.execute(query, tuple(tasks))))
 
     @property
     def tasks(self):
         """An iterator over all tasks in the db"""
-        return map(self._make_task, self.execute(scripts.get_all_task_attributes))
+        return map(self._make_task, self.execute(scripts["get_all_task_attributes"]))
 
     @lru_cache(maxsize=1000)
     def get_string(self, string_id: int) -> str:
-        (string,) = self.execute(scripts.get_string, (string_id,)).fetchone()
+        (string,) = self.execute(scripts["get_string"], (string_id,)).fetchone()
         return string
 
     @lru_cache(maxsize=1000)
     def get_source_location(self, location_id: int) -> SourceLocation:
         """Construct a source location from its id"""
-        row = self.execute(scripts.get_source_location, (location_id,)).fetchone()
+        row = self.execute(scripts["get_source_location"], (location_id,)).fetchone()
         return SourceLocation(*row)
 
     def get_all_source_locations(self) -> List[Tuple[int, SourceLocation]]:
@@ -215,13 +184,13 @@ class Connection(sqlite3.Connection):
     def task_types(self) -> Generator[Tuple[TaskAttributes, int], None, None]:
         """Return task attributes for each distinct set of task attributes and the number of such records"""
 
-        cur = self.execute(scripts.count_tasks_by_attributes)
+        cur = self.execute(scripts["count_tasks_by_attributes"])
         return ((self._make_task_attr(*row[0:4]), row[4]) for row in cur)
 
     def task_scheduling_states(self, tasks: Tuple[int]) -> List[TaskSchedulingState]:
         """Return 1 row per task scheduling state during the task's lifetime"""
 
-        query = scripts.get_task_scheduling_states.format(
+        query = scripts["get_task_scheduling_states"].format(
             placeholder=",".join("?" for task in tasks)
         )
         cur = self.execute(query, tasks)
@@ -239,15 +208,15 @@ class Connection(sqlite3.Connection):
     ) -> List[Tuple[int, str]]:
         """Return the children created between the given start & end times"""
 
-        query = scripts.get_children_created_between.format(
+        query = scripts["get_children_created_between"].format(
             start_ts=start_ts, end_ts=end_ts
         )
         cur = self.execute(query, (task,))
         return list(cur)
 
     def print_row_count(self, sep: str = " "):
-        for name, table_or_view, num_rows in self.count_rows():
-            print(table_or_view, name, num_rows, sep=sep)
+        for items in self.count_rows():
+            print(*items, sep=sep)
 
     def print_source_locations(self, sep: str = " "):
         for location_id, location in self.get_all_source_locations():
