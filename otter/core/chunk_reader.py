@@ -5,6 +5,7 @@ from typing import Protocol, Tuple, Generator, Iterable
 from otf2_ext.events import EventType
 
 from otter import db
+from otter.db.scripts import scripts
 
 from .events import Event
 from .chunks import Chunk
@@ -51,12 +52,12 @@ class DBChunkReader:
         self._seek_events = seek_events
 
     def __iter__(self) -> Generator[int, None, None]:
-        rows = self.con.execute(db.scripts.get_chunk_ids).fetchall()
+        rows = self.con.execute(scripts["get_chunk_ids"]).fetchall()
         for row in rows:
             yield row["chunk_key"]
 
     def __len__(self) -> int:
-        row = self.con.execute(db.scripts.count_chunks).fetchone()
+        row = self.con.execute(scripts["count_chunks"]).fetchone()
         return row["num_chunks"]
 
     def items(self) -> Iterable[Tuple[int, Chunk]]:
@@ -70,7 +71,7 @@ class DBChunkReader:
 
     def get_chunk(self, key: int) -> Chunk:
         rows: Iterable[Tuple[int, int]] = self.con.execute(
-            db.scripts.get_chunk_events, (key,)
+            scripts["get_chunk_events"], (key,)
         ).fetchall()
         chunk = Chunk()
         for pos, (location, event) in self._seek_events(rows):
@@ -78,5 +79,5 @@ class DBChunkReader:
         return chunk
 
     def contains(self, key: int) -> bool:
-        rows = self.con.execute(db.scripts.get_chunk_events, (key,)).fetchall()
+        rows = self.con.execute(scripts["get_chunk_events"], (key,)).fetchall()
         return len(rows) > 0

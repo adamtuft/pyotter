@@ -3,7 +3,7 @@ from __future__ import annotations
 from typing import Protocol, List, Tuple
 import sqlite3
 
-from otter import db
+from otter.db.scripts import scripts
 
 import otter.log
 
@@ -53,7 +53,7 @@ class DBChunkBuilder:
 
     def __len__(self) -> int:
         self._flush()
-        row = self.con.execute(db.scripts.count_chunks).fetchone()
+        row = self.con.execute(scripts["count_chunks"]).fetchone()
         return row["num_chunks"]
 
     def new_chunk(self, key: int, event: Event, location_ref: int, location_count: int):
@@ -79,7 +79,7 @@ class DBChunkBuilder:
         for k, *_ in self._buffer:
             if k == key:
                 return True
-        rows = self.con.execute(db.scripts.get_chunk_events, (key,)).fetchall()
+        rows = self.con.execute(scripts["get_chunk_events"], (key,)).fetchall()
         return len(rows) > 0
 
     def close(self):
@@ -87,6 +87,6 @@ class DBChunkBuilder:
         self._flush()
 
     def _flush(self):
-        self.con.executemany(db.scripts.insert_chunk_events, self._buffer)
+        self.con.executemany(scripts["insert_chunk_events"], self._buffer)
         self.con.commit()
         self._buffer.clear()
