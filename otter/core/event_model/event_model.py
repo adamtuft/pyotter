@@ -173,7 +173,7 @@ class BaseEventModel(ABC):
 
             total_events = k
 
-        otter.log.info(f"read %d events", total_events)
+        return total_events
 
 
 class EventModelFactory:

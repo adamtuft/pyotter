@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from contextlib import ExitStack
 from typing import Dict
+from time import time
 
 import otf2_ext
 
@@ -99,11 +100,18 @@ def process_trace(anchorfile: str, con: otter.db.Connection):
         )
         with closing_resources:
             otter.log.info("extracting task data...")
-            event_model.apply_callbacks(
+            start = time()
+            events_count = event_model.apply_callbacks(
                 event_iter,
                 task_meta_writer.add_task_metadata,
                 task_action_writer.add_task_action,
                 task_action_writer.add_task_suspend_meta,
+            )
+            end = time()
+            dt = end - start
+            eps = events_count / dt
+            otter.log.info(
+                f"read {events_count} events in {dt:.3f}s ({eps:.3g} events/sec)"
             )
             otter.log.info("finalise definitions...")
 
