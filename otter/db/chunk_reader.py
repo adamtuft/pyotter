@@ -7,8 +7,8 @@ from otf2_ext.events import EventType
 from otter import db
 from otter.db.scripts import scripts
 
-from .events import Event
-from .chunks import Chunk
+from ..core.events import Event
+from ..core.chunks import Chunk
 
 
 class SeekEventsCallback(Protocol):
