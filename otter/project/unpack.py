@@ -17,7 +17,6 @@ from otter.db.writers import (
     StringDefinitionWriter,
 )
 from otter.db.types import SourceLocation
-from otter.utils.context import closing_all
 from otter.db.writers import ChunkWriter
 from otter.core.events import Event, Location
 from otter.core.event_model.event_model import (
@@ -25,102 +24,95 @@ from otter.core.event_model.event_model import (
     TraceEventIterable,
     get_event_model,
 )
+from otter.utils.context import closing_all
 from otter.utils import CountingDict, LabellingDict
 
 from .project import Project
 
 
-class UnpackTraceProject(Project):
-    """Unpack a trace"""
+def process_trace(anchorfile: str, con: otter.db.Connection):
+    """Read a trace and create a database of tasks"""
 
-    def __init__(self, anchorfile: str, debug: bool = False) -> None:
-        super().__init__(anchorfile, debug)
-        self.source_location_id: Dict[SourceLocation, int] = LabellingDict()
-        self.string_id: Dict[str, int] = LabellingDict()
+    source_location_id: Dict[SourceLocation, int] = LabellingDict()
+    string_id: Dict[str, int] = LabellingDict()
 
-    def process_trace(self, con: otter.db.Connection):
-        """Read a trace and create a database of tasks"""
+    otter.log.info("processing trace")
 
-        otter.log.info("processing trace")
+    chunk_writer = ChunkWriter(con, bufsize=5000)
+    task_meta_writer = TaskMetaWriter(con, string_id)
+    task_action_writer = TaskActionWriter(con, source_location_id)
 
-        chunk_writer = ChunkWriter(con, bufsize=5000)
-        task_meta_writer = TaskMetaWriter(con, self.string_id)
-        task_action_writer = TaskActionWriter(con, self.source_location_id)
+    # Write definitions to the database
+    source_writer = SourceLocationWriter(con, string_id, source_location_id)
+    string_writer = StringDefinitionWriter(con, string_id)
 
-        # Write definitions to the database
-        source_writer = SourceLocationWriter(
-            con, self.string_id, self.source_location_id
+    # Build the chunks & tasks data
+    with ExitStack() as outer:
+        reader = outer.enter_context(otf2_ext.open_trace(anchorfile))
+
+        otter.log.info("recorded trace version: %s", reader.trace_version)
+
+        if reader.trace_version != otf2_ext.version:
+            otter.log.warning(
+                "version mismatch: trace version is %s, python version is %s",
+                reader.trace_version,
+                otf2_ext.version,
+            )
+
+        event_model_name = EventModel(reader.get_property(TraceAttr.event_model.value))
+
+        return_addresses = set()
+        event_model = get_event_model(
+            event_model_name,
+            gather_return_addresses=return_addresses,
         )
-        string_writer = StringDefinitionWriter(con, self.string_id)
 
-        # Build the chunks & tasks data
-        with ExitStack() as outer:
-            reader = outer.enter_context(otf2_ext.open_trace(self.anchorfile))
+        otter.log.info("found event model name: %s", event_model_name)
+        otter.log.info("using event model: %s", event_model)
 
-            otter.log.info("recorded trace version: %s", reader.trace_version)
+        locations: Dict[int, Location] = {
+            ref: Location(location) for ref, location in reader.locations.items()
+        }
 
-            if reader.trace_version != otf2_ext.version:
-                otter.log.warning(
-                    "version mismatch: trace version is %s, python version is %s",
-                    reader.trace_version,
-                    otf2_ext.version,
-                )
+        # Count the number of events each location yields
+        location_counter = CountingDict(start=1)
 
-            event_model_name = EventModel(
-                reader.get_property(TraceAttr.event_model.value)
+        # Get the global event reader which streams all events
+        global_event_reader = outer.enter_context(reader.events())
+
+        event_iter: TraceEventIterable = (
+            (
+                locations[location],
+                location_counter.increment(location),
+                Event(event, reader.attributes),
             )
+            for location, event in global_event_reader
+        )
 
-            self.event_model = get_event_model(
-                event_model_name,
-                gather_return_addresses=self.return_addresses,
+        otter.log.info("building chunks")
+        otter.log.info("using chunk builder: %s", str(chunk_writer))
+
+        # Push source & string writers before chunk & task builders so the
+        # definitions get generated first, then flushed when the writers
+        # are closed.
+        # NOTE: order is important!
+        closing_resources = closing_all(
+            string_writer,  # Must push before source_writer so all strings have been seen
+            source_writer,
+            chunk_writer,
+            task_meta_writer,
+            task_action_writer,
+        )
+        with closing_resources:
+            num_chunks = event_model.generate_chunks(
+                event_iter,
+                chunk_writer.insert,
+                task_meta_writer.add_task_metadata,
+                task_action_writer.add_task_action,
+                task_action_writer.add_task_suspend_meta,
             )
-
-            otter.log.info("found event model name: %s", event_model_name)
-            otter.log.info("using event model: %s", self.event_model)
-
-            locations: Dict[int, Location] = {
-                ref: Location(location) for ref, location in reader.locations.items()
-            }
-
-            # Count the number of events each location yields
-            location_counter = CountingDict(start=1)
-
-            # Get the global event reader which streams all events
-            global_event_reader = outer.enter_context(reader.events())
-
-            event_iter: TraceEventIterable = (
-                (
-                    locations[location],
-                    location_counter.increment(location),
-                    Event(event, reader.attributes),
-                )
-                for location, event in global_event_reader
-            )
-
-            otter.log.info("building chunks")
-            otter.log.info("using chunk builder: %s", str(chunk_writer))
-
-            # Push source & string writers before chunk & task builders so the
-            # definitions get generated first, then flushed when the writers
-            # are closed.
-            # NOTE: order is important!
-            closing_resources = closing_all(
-                string_writer,  # Must push before source_writer so all strings have been seen
-                source_writer,
-                chunk_writer,
-                task_meta_writer,
-                task_action_writer,
-            )
-            with closing_resources:
-                num_chunks = self.event_model.generate_chunks(
-                    event_iter,
-                    chunk_writer.insert,
-                    task_meta_writer.add_task_metadata,
-                    task_action_writer.add_task_action,
-                    task_action_writer.add_task_suspend_meta,
-                )
-                otter.log.info("generated %d chunks", num_chunks)
-                otter.log.info("finalise definitions...")
+            otter.log.info("generated %d chunks", num_chunks)
+            otter.log.info("finalise definitions...")
 
 
 def unpack_trace(anchorfile: str, debug: bool = False) -> None:
@@ -128,7 +120,7 @@ def unpack_trace(anchorfile: str, debug: bool = False) -> None:
 
     otter.log.info("using OTF2 python version %s", otf2_ext.version)
 
-    project = UnpackTraceProject(anchorfile, debug=debug)
+    project = Project(anchorfile, debug=debug)
     with project.prepare_connection() as con:
-        project.process_trace(con)
+        process_trace(project.anchorfile, con)
         otter.log.info("finalise database...")
