@@ -44,7 +44,7 @@ def process_trace(anchorfile: str, con: otter.db.Connection):
     source_writer = SourceLocationWriter(con, string_id, source_location_id)
     string_writer = StringDefinitionWriter(con, string_id)
 
-    # Build the chunks & tasks data
+    # Build the tasks data
     with ExitStack() as outer:
         reader = outer.enter_context(otf2_ext.open_trace(anchorfile))
 
@@ -87,9 +87,7 @@ def process_trace(anchorfile: str, con: otter.db.Connection):
             for location, event in global_event_reader
         )
 
-        otter.log.info("building chunks")
-
-        # Push source & string writers before chunk & task builders so the
+        # Push source & string writers before task builders so the
         # definitions get generated first, then flushed when the writers
         # are closed.
         # NOTE: order is important!
@@ -100,13 +98,12 @@ def process_trace(anchorfile: str, con: otter.db.Connection):
             task_action_writer,
         )
         with closing_resources:
-            num_chunks = event_model.generate_chunks(
+            event_model.apply_callbacks(
                 event_iter,
                 task_meta_writer.add_task_metadata,
                 task_action_writer.add_task_action,
                 task_action_writer.add_task_suspend_meta,
             )
-            otter.log.info("generated %d chunks", num_chunks)
             otter.log.info("finalise definitions...")
 
 

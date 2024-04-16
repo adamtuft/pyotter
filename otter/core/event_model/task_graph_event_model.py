@@ -27,57 +27,6 @@ from .event_model import (
     TraceEventIterable,
 )
 
-"""
-EVENT MODEL INCLUDING TASK-CREATE
-
-Possible events that can appear in a Task-Graph trace:
-    - task-create
-    - task-switch (enter/leave) i.e. task-begin/task-end
-    - task-sync (enter/leave sync region, or discrete i.e. just a sync without suspending) i.e. suspend/resume at a synchronisation barrier
-
-Where will these events appear in a chunk?
-
-    - task-create: in the encountering (i.e. parent) task's chunk only.
-    - task-switch: (enter/leave) in the (entered/left) task's chunk
-    - task-sync: (enter/leave/discrete) in the chunk of the task which is suspended/resumed i.e. the encountering task
-
-So a leaf task's chunk may only look like this:
-
-        task-enter
-        task-leave
-
-A branch task's chunk could look like this:
-
-        task-enter
-        task-create
-        task-sync-enter
-        task-sync-leave
-        task-create
-        task-create
-        task-create
-        task-sync-enter
-        task-sync-leave
-        task-create
-        ...
-        task-leave
-
-NOTE: there is no task-create event for the root task.
-
-So here is the logic to apply to each event:
-
-task-enter:
-    create a chunk with this event
-    *updates task start ts*
-task-sync-enter/task-sync-leave/task-sync-discrete/task-create:
-    append to encountering task's chunk (i.e. the current default logic)
-    *these events (except task-create) update task timestamps*
-    *task-sync-enter/task-sync-discrete timestamps are used for synchronising tasks*
-    *task-create timestamp is used for matching tasks to barriers*
-task-leave:
-    append to the chunk for the task which was left (recorded as event.encountering_task_id) i.e. the current default logic
-    *this event completes a chunk*
-"""
-
 
 @EventModelFactory.register(EventModel.TASKGRAPH)
 class TaskGraphEventModel(BaseEventModel):
@@ -182,14 +131,14 @@ class TaskGraphEventModel(BaseEventModel):
                 yield location, location_count, event
                 self._post_yield_event_callback(event)
 
-    def generate_chunks(
+    def apply_callbacks(
         self,
         events_iter: TraceEventIterable,
         add_task_metadata_cbk: TaskMetaCallback,
         add_task_action_cbk: TaskActionCallback,
         add_task_suspend_meta_cbk: TaskSuspendMetaCallback,
     ):
-        return super().generate_chunks(
+        return super().apply_callbacks(
             self._filter_with_callbacks(events_iter),
             add_task_metadata_cbk,
             add_task_action_cbk,

@@ -97,17 +97,16 @@ class BaseEventModel(ABC):
         """Get the source location of this event"""
         raise NotImplementedError()
 
-    def generate_chunks(
+    def apply_callbacks(
         self,
         events_iter: TraceEventIterable,
         add_task_metadata_cbk: TaskMetaCallback,
         add_task_action_cbk: TaskActionCallback,
         add_task_suspend_meta_cbk: TaskSuspendMetaCallback,
-    ) -> int:
+    ):
         otter.log.debug("receiving events from %s", events_iter)
 
         total_events = 0
-        num_chunks = 0
         for k, (location, location_count, event) in enumerate(events_iter, start=1):
             otter.log.debug(
                 "got event %d (location=%s, position=%d): %s",
@@ -175,8 +174,6 @@ class BaseEventModel(ABC):
             total_events = k
 
         otter.log.info(f"read %d events", total_events)
-
-        return num_chunks
 
 
 class EventModelFactory:
