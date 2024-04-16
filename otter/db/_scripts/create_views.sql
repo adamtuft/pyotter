@@ -16,7 +16,7 @@ create view if not exists task_create_location(
         on hist.id = task.id
         and hist.action = 1 -- create
     inner join source as src
-        on src.src_loc_id = hist.location_id
+        on src.src_loc_id = hist.source_location_id
     inner join string as file
         on file.id = src.file_id
     inner join string as func
@@ -39,7 +39,7 @@ create view if not exists task_start_location(
         on hist.id = task.id
         and hist.action = 2 -- start
     inner join source as src
-        on src.src_loc_id = hist.location_id
+        on src.src_loc_id = hist.source_location_id
     inner join string as file
         on file.id = src.file_id
     inner join string as func
@@ -62,7 +62,7 @@ create view if not exists task_end_location(
         on hist.id = task.id
         and hist.action = 3 -- end
     inner join source as src
-        on src.src_loc_id = hist.location_id
+        on src.src_loc_id = hist.source_location_id
     inner join string as file
         on file.id = src.file_id
     inner join string as func

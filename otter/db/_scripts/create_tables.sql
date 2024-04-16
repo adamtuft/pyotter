@@ -21,10 +21,12 @@ create table task(
 
 -- List actions of each task, using partial keys to enforce uniqueness of some actions
 create table task_history(
-    id int not null,       -- task ID
-    action int not null,   -- 
-    time not null,         -- time of action
-    location_id,           -- source location
+    id int not null,                     -- task ID
+    action int not null,                 -- 
+    time not null,                       -- time of action
+    source_location_id int not null,     -- source location
+    location_ref int not null,           -- location ref of the evt writer
+    location_count int not null,         -- position in the evt writer's stream
     foreign key (id) references task (id)
 );
 
@@ -92,7 +94,7 @@ create table sim_task_history(
     id int not null,       -- task ID
     action int not null,   -- 
     time not null,         -- time of action
-    location_id,           -- source location
+    source_location_id,    -- source location
     foreign key (id) references task (id)
 );
 

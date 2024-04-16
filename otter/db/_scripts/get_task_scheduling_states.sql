@@ -22,9 +22,9 @@ inner join events as events_right
 	on events_left.id = events_right.id
 	and events_left.row_number = events_right.row_number-1
 left join source_location as src_left
-    on events_left.location_id = src_left.src_loc_id
+    on events_left.source_location_id = src_left.src_loc_id
 left join source_location as src_right
-    on events_right.location_id = src_right.src_loc_id
+    on events_right.source_location_id = src_right.src_loc_id
 order by events_left.id
 	,start_ts
 ;
