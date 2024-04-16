@@ -18,7 +18,7 @@ from otter.db import (
 )
 from otter.db.types import SourceLocation
 from otter.utils.context import closing_all
-from otter.core import DBChunkBuilder
+from otter.db.chunk_builder import DBChunkBuilder
 from otter.core.events import Event, Location
 from otter.core.event_model.event_model import (
     EventModel,

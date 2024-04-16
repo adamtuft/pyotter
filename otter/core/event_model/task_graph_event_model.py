@@ -12,7 +12,7 @@ from otter.db.protocols import (
 
 from otter.db.types import SourceLocation
 
-from otter.core.chunk_builder import (
+from otter.db.chunk_builder import (
     ChunkBuilderProtocol,
     ChunkKeyNotFoundError,
     ChunkKeyDuplicateError,

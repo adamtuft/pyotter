@@ -7,7 +7,7 @@ from otter.db.scripts import scripts
 
 import otter.log
 
-from .events import Event
+from ..core.events import Event
 
 
 class ChunkKeyNotFoundError(Exception):
