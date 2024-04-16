@@ -21,6 +21,7 @@ create table task(
 
 -- List actions of each task, using partial keys to enforce uniqueness of some actions
 create table task_history(
+    branch int not null,                 -- each branch is a separate history i.e. native and 1+ simulated histories
     id int not null,                     -- task ID
     action int not null,                 -- 
     time not null,                       -- time of action
@@ -32,10 +33,11 @@ create table task_history(
 
 -- List metadata about each task-suspend action
 create table task_suspend_meta(
+    branch int not null,   -- each branch is a separate history i.e. native and 1+ simulated histories
     id int not null,       -- task ID
     time not null,         -- time of action
     sync_descendants int not null,
-    primary key (id, time)
+    primary key (branch, id, time)
     foreign key (id) references task (id)
 );
 

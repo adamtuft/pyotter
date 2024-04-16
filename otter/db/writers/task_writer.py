@@ -65,10 +65,10 @@ class TaskActionWriter:
         )
         self._source_location_id = source_location_id
         self._task_actions = BufferedDBWriter(
-            con, "task_history", 6, bufsize=bufsize, overwrite=overwrite
+            con, "task_history", 7, bufsize=bufsize, overwrite=overwrite
         )
         self._task_suspend_meta = BufferedDBWriter(
-            con, "task_suspend_meta", 3, bufsize=bufsize, overwrite=overwrite
+            con, "task_suspend_meta", 4, bufsize=bufsize, overwrite=overwrite
         )
 
     def add_task_action(
@@ -82,6 +82,7 @@ class TaskActionWriter:
         /,
     ) -> None:
         self._task_actions.insert(
+            0,  # branch of history
             task,
             action,
             time,
@@ -93,7 +94,12 @@ class TaskActionWriter:
     def add_task_suspend_meta(
         self, task: int, time: str, sync_descendants: bool
     ) -> None:
-        self._task_suspend_meta.insert(task, time, int(sync_descendants))
+        self._task_suspend_meta.insert(
+            0,  # branch of task meta history
+            task,
+            time,
+            int(sync_descendants),
+        )
 
     def close(self):
         self.debug("closing...")
