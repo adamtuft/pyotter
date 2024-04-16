@@ -1,12 +1,14 @@
 from typing import Dict
 
-from .types import SourceLocation
-from .connect import Connection
+from ..connect import Connection
+from ..types import SourceLocation
 
 import otter.log
 
 
-class DBSourceLocationWriter:
+class SourceLocationWriter:
+    """NOTE: Doesn't use BufferedDBWriter as there should be few enough source
+    locations that we can just buffer them in memory."""
 
     def __init__(
         self,

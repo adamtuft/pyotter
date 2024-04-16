@@ -10,15 +10,15 @@ import otter.db
 import otter.simulator
 
 from otter.definitions import TraceAttr
-from otter.db import (
-    DBTaskMetaWriter,
-    DBTaskActionWriter,
-    DBSourceLocationWriter,
-    DBStringDefinitionWriter,
+from otter.db.writers import (
+    TaskMetaWriter,
+    TaskActionWriter,
+    SourceLocationWriter,
+    StringDefinitionWriter,
 )
 from otter.db.types import SourceLocation
 from otter.utils.context import closing_all
-from otter.db.chunk_builder import DBChunkBuilder
+from otter.db.writers import ChunkWriter
 from otter.core.events import Event, Location
 from otter.core.event_model.event_model import (
     EventModel,
@@ -43,15 +43,15 @@ class UnpackTraceProject(Project):
 
         otter.log.info("processing trace")
 
-        chunk_builder = DBChunkBuilder(con, bufsize=5000)
-        task_meta_writer = DBTaskMetaWriter(con, self.string_id)
-        task_action_writer = DBTaskActionWriter(con, self.source_location_id)
+        chunk_writer = ChunkWriter(con, bufsize=5000)
+        task_meta_writer = TaskMetaWriter(con, self.string_id)
+        task_action_writer = TaskActionWriter(con, self.source_location_id)
 
         # Write definitions to the database
-        source_writer = DBSourceLocationWriter(
+        source_writer = SourceLocationWriter(
             con, self.string_id, self.source_location_id
         )
-        string_writer = DBStringDefinitionWriter(con, self.string_id)
+        string_writer = StringDefinitionWriter(con, self.string_id)
 
         # Build the chunks & tasks data
         with ExitStack() as outer:
@@ -98,7 +98,7 @@ class UnpackTraceProject(Project):
             )
 
             otter.log.info("building chunks")
-            otter.log.info("using chunk builder: %s", str(chunk_builder))
+            otter.log.info("using chunk builder: %s", str(chunk_writer))
 
             # Push source & string writers before chunk & task builders so the
             # definitions get generated first, then flushed when the writers
@@ -107,14 +107,14 @@ class UnpackTraceProject(Project):
             closing_resources = closing_all(
                 string_writer,  # Must push before source_writer so all strings have been seen
                 source_writer,
-                chunk_builder,
+                chunk_writer,
                 task_meta_writer,
                 task_action_writer,
             )
             with closing_resources:
                 num_chunks = self.event_model.generate_chunks(
                     event_iter,
-                    chunk_builder.append_to_chunk,
+                    chunk_writer.insert,
                     task_meta_writer.add_task_metadata,
                     task_action_writer.add_task_action,
                     task_action_writer.add_task_suspend_meta,

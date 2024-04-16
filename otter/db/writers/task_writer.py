@@ -4,12 +4,12 @@ from otter.definitions import TaskAction
 
 import otter.log
 
-from .types import SourceLocation
-from .connect import Connection
+from ..types import SourceLocation
+from ..connect import Connection
 from .buffered_writers import BufferedDBWriter
 
 
-class DBTaskMetaWriter:
+class TaskMetaWriter:
 
     def __init__(
         self,
@@ -51,7 +51,7 @@ class DBTaskMetaWriter:
         self._task_links.close()
 
 
-class DBTaskActionWriter:
+class TaskActionWriter:
 
     def __init__(
         self,

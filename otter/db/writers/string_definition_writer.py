@@ -1,11 +1,13 @@
 from typing import Dict
 
-from .connect import Connection
+from ..connect import Connection
 
 import otter.log
 
 
-class DBStringDefinitionWriter:
+class StringDefinitionWriter:
+    """NOTE: Doesn't use BufferedDBWriter as there should be few enough string
+    definitions that we can just buffer them in memory."""
 
     def __init__(
         self,
@@ -18,14 +20,11 @@ class DBStringDefinitionWriter:
         self._con = con
         self._string_id_map = string_id_lookup
 
-    def __iter__(self):
-        for string, string_key in self._string_id_map.items():
-            yield string_key, string
-
     def close(self):
         self.debug("closing...")
         if otter.log.is_debug_enabled():
-            for key, value in self:
+            for key, value in self._string_id_map.items():
                 self.debug(f"{key=}, {value=}")
-        self._con.executemany("insert into string values(?,?);", self)
+        items = ((k, s) for s, k in self._string_id_map.items())
+        self._con.executemany("insert into string values(?,?);", items)
         self._con.commit()
