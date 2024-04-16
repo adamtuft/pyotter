@@ -24,7 +24,7 @@ from otter.db.protocols import (
 
 from otter.db.types import SourceLocation
 
-from otter.db.chunk_builder import ChunkBuilderProtocol
+from otter.db.protocols import AppendToChunkCallback
 from otter.core.chunks import Chunk
 from otter.core.events import Event, Location
 from otter.core.tasks import TaskData
@@ -51,7 +51,7 @@ class ChunkUpdateHandlerFn(Protocol):
         event: Event,
         location: Location,
         location_count: int,
-        chunk_builder: ChunkBuilderProtocol,
+        append_to_chunk: AppendToChunkCallback,
     ) -> Optional[int]: ...
 
 
@@ -174,7 +174,7 @@ class BaseEventModel(ABC):
     def generate_chunks(
         self,
         events_iter: TraceEventIterable,
-        chunk_builder: ChunkBuilderProtocol,
+        append_to_chunk: AppendToChunkCallback,
         add_task_metadata_cbk: TaskMetaCallback,
         add_task_action_cbk: TaskActionCallback,
         add_task_suspend_meta_cbk: TaskSuspendMetaCallback,
@@ -196,16 +196,16 @@ class BaseEventModel(ABC):
             handler = self.get_update_chunk_handler(event)
             if self.event_completes_chunk(event):
                 assert handler is not None
-                handler(event, location, location_count, chunk_builder)
+                handler(event, location, location_count, append_to_chunk)
                 num_chunks += 1
             elif self.event_updates_chunk(event):
                 assert handler is not None
-                handler(event, location, location_count, chunk_builder)
+                handler(event, location, location_count, append_to_chunk)
             elif self.event_skips_chunk_update(event):
                 pass
             else:  # event applies default chunk update logic
                 self.append_to_encountering_task_chunk(
-                    event, location, location_count, chunk_builder
+                    event, location, location_count, append_to_chunk
                 )
 
             # Update the task builder
@@ -264,11 +264,9 @@ class BaseEventModel(ABC):
         event: Event,
         location: Location,
         location_count: int,
-        chunk_builder: ChunkBuilderProtocol,
+        append_to_chunk: AppendToChunkCallback,
     ) -> None:
-        chunk_builder.append_to_chunk(
-            event.encountering_task_id, event, location.ref, location_count
-        )
+        append_to_chunk(event.encountering_task_id, location.ref, location_count)
 
     @abstractmethod
     def get_task_registered_data(self, event: Event) -> TaskData:

@@ -27,3 +27,9 @@ class TaskSuspendMetaCallback(Protocol):
     """Callback used to dispatch metadata about task-suspend actions"""
 
     def __call__(self, task: int, time: str, sync_descendants: bool) -> None: ...
+
+
+class AppendToChunkCallback(Protocol):
+    """Callback used to append event position information to a chunk"""
+
+    def __call__(self, key: int, location_ref: int, location_count: int) -> None: ...

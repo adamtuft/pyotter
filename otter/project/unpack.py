@@ -114,7 +114,7 @@ class UnpackTraceProject(Project):
             with closing_resources:
                 num_chunks = self.event_model.generate_chunks(
                     event_iter,
-                    chunk_builder,
+                    chunk_builder.append_to_chunk,
                     task_meta_writer.add_task_metadata,
                     task_action_writer.add_task_action,
                     task_action_writer.add_task_suspend_meta,

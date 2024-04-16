@@ -12,11 +12,7 @@ from otter.db.protocols import (
 
 from otter.db.types import SourceLocation
 
-from otter.db.chunk_builder import (
-    ChunkBuilderProtocol,
-    ChunkKeyNotFoundError,
-    ChunkKeyDuplicateError,
-)
+from otter.db.protocols import AppendToChunkCallback
 from otter.core.events import Event, Location
 from otter.core.tasks import TaskData
 from otter.definitions import (
@@ -189,14 +185,14 @@ class TaskGraphEventModel(BaseEventModel):
     def generate_chunks(
         self,
         events_iter: TraceEventIterable,
-        chunk_builder: ChunkBuilderProtocol,
+        append_to_chunk: AppendToChunkCallback,
         add_task_metadata_cbk: TaskMetaCallback,
         add_task_action_cbk: TaskActionCallback,
         add_task_suspend_meta_cbk: TaskSuspendMetaCallback,
     ):
         return super().generate_chunks(
             self._filter_with_callbacks(events_iter),
-            chunk_builder,
+            append_to_chunk,
             add_task_metadata_cbk,
             add_task_action_cbk,
             add_task_suspend_meta_cbk,
@@ -208,18 +204,11 @@ def update_chunks_task_enter(
     event: Event,
     location: Location,
     location_count: int,
-    chunk_builder: ChunkBuilderProtocol,
+    append_to_chunk: AppendToChunkCallback,
 ) -> Optional[int]:
-    assert hasattr(event, Attr.encountering_task_id.value)
     task: int = event.encountering_task_id
     assert task != NullTaskID
-    try:
-        chunk_builder.new_chunk(task, event, location.ref, location_count)
-    except ChunkKeyDuplicateError:
-        otter.log.error(f"prior events for {task=} when processing task-enter event:")
-        otter.log.error(f"  {location=}. {location_count=}")
-        otter.log.error(f"  {event}")
-        raise
+    append_to_chunk(task, location.ref, location_count)
     return None
 
 
@@ -228,18 +217,9 @@ def update_chunks_task_leave(
     event: Event,
     location: Location,
     location_count: int,
-    chunk_builder: ChunkBuilderProtocol,
+    append_to_chunk: AppendToChunkCallback,
 ) -> Optional[int]:
-    assert hasattr(event, Attr.encountering_task_id.value)
     task: int = event.encountering_task_id
     assert task != NullTaskID
-    try:
-        chunk_builder.append_to_chunk(task, event, location.ref, location_count)
-    except ChunkKeyNotFoundError:
-        otter.log.error(
-            f"no prior events for {task=} when processing task-leave event:"
-        )
-        otter.log.error(f"  {location=}. {location_count=}")
-        otter.log.error(f"  {event}")
-        raise
+    append_to_chunk(task, location.ref, location_count)
     return task
