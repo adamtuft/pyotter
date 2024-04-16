@@ -38,8 +38,8 @@ def process_trace(anchorfile: str, con: otter.db.Connection):
 
     otter.log.info("processing trace")
 
-    task_meta_writer = TaskMetaWriter(con, string_id)
-    task_action_writer = TaskActionWriter(con, source_location_id)
+    task_meta_writer = TaskMetaWriter(con, string_id, bufsize=1000000)
+    task_action_writer = TaskActionWriter(con, source_location_id, bufsize=1000000)
 
     # Write definitions to the database
     source_writer = SourceLocationWriter(con, string_id, source_location_id)
