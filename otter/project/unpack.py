@@ -98,6 +98,7 @@ def process_trace(anchorfile: str, con: otter.db.Connection):
             task_action_writer,
         )
         with closing_resources:
+            otter.log.info("extracting task data...")
             event_model.apply_callbacks(
                 event_iter,
                 task_meta_writer.add_task_metadata,
