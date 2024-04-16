@@ -76,10 +76,13 @@ class TaskActionWriter:
         task: int,
         action: TaskAction,
         time: str,
-        location: SourceLocation,
+        source_location: SourceLocation,
+        location_ref: int,
+        location_count: int,
+        /,
     ) -> None:
         self._task_actions.insert(
-            task, action, time, self._source_location_id[location]
+            task, action, time, self._source_location_id[source_location]
         )
 
     def add_task_suspend_meta(

@@ -19,7 +19,10 @@ class TaskActionCallback(Protocol):
         task: int,
         action: TaskAction,
         time: str,
-        location: SourceLocation,
+        source_location: SourceLocation,
+        location_ref: int,
+        location_count: int,
+        /,
     ) -> None: ...
 
 
