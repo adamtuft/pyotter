@@ -23,7 +23,6 @@ from otter.db.protocols import (
     TaskSuspendMetaCallback,
     AppendToChunkCallback,
 )
-from otter.core.chunks import Chunk
 from otter.core.events import Event, Location
 from otter.core.tasks import TaskData
 from otter.definitions import (
@@ -39,7 +38,6 @@ from otter.utils.typing import Decorator
 # Type hint aliases
 EventList = List[Event]
 TraceEventIterable = Iterable[Tuple[Location, int, Event]]
-ChunkStackDict = Dict[Any, Deque[Chunk]]
 ChunkUpdateHandlerKey = Tuple[Optional[RegionType], EventType]
 
 

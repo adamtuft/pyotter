@@ -1,6 +1,9 @@
-from typing import Protocol, Optional
+from typing import Protocol, Optional, Tuple, Iterable
+
+from otf2_ext.events import EventType
 
 from otter.definitions import TaskAction
+from otter.core.events import Event
 
 from .types import SourceLocation
 
@@ -36,3 +39,19 @@ class AppendToChunkCallback(Protocol):
     """Callback used to append event position information to a chunk"""
 
     def __call__(self, key: int, location_ref: int, location_count: int, /) -> None: ...
+
+
+class EventReaderProtocol(Protocol):
+    """Responsible for reading or re-constructing the events of a task"""
+
+    def __call__(self, task: int, /) -> list[Event]: ...
+
+
+class SeekEventsCallback(Protocol):
+    """A callback used to seek events from a trace, given tuples of location ref
+    & event positions
+    """
+
+    def __call__(
+        self, positions: Iterable[Tuple[int, int]], batch_size: int = 100
+    ) -> Iterable[Tuple[int, Tuple[int, EventType]]]: ...

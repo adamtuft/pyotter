@@ -1,14 +1,11 @@
 from __future__ import annotations
 
 import os
-from typing import Set
 from contextlib import contextmanager
 
 import otter.log
 import otter.db
 import otter.simulator
-
-from otter.core import Chunk
 
 from prettytable import PrettyTable
 
@@ -38,11 +35,7 @@ class Project:
             otter.log.error("no such file: %s", self.maps_file)
             raise SystemExit(1)
 
-        self.source_location_db = self.abspath(os.path.join(self.aux_dir, "srcloc.db"))
         self.tasks_db = self.abspath(os.path.join(self.aux_dir, "tasks.db"))
-        self.return_addresses: Set[int] = set()
-        self.event_model = None
-        self.chunks: list[Chunk] = []
 
         otter.log.info("project root:  %s", self.project_root)
         otter.log.info("anchorfile:    %s", self.anchorfile)

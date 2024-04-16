@@ -6,7 +6,6 @@ from collections import defaultdict
 from typing import Any, Callable, Deque, Dict, List, Optional, Tuple
 
 from otter.db.types import SourceLocation
-from otter.core.chunks import Chunk, ChunkDict
 from otter.core.events import Event, Location
 from otter.core.tasks import TaskData
 from otter.definitions import (
@@ -16,15 +15,14 @@ from otter.definitions import (
     TaskStatus,
 )
 
-from .event_model import BaseEventModel, ChunkStackDict, EventModelFactory
+from .event_model import BaseEventModel, EventModelFactory
 
 # Type hint aliases
-EventList = List[Event]
-ChunkStackDict = Dict[Any, Deque[Chunk]]
-ChunkUpdateHandlerKey = Tuple[Optional[RegionType], EventType]
-ChunkUpdateHandlerFn = Callable[
-    [Event, Location, ChunkDict, ChunkStackDict, Any], Optional[Chunk]
-]
+# EventList = List[Event]
+# ChunkUpdateHandlerKey = Tuple[Optional[RegionType], EventType]
+# ChunkUpdateHandlerFn = Callable[
+#     [Event, Location, ChunkDict, ChunkStackDict, Any], Optional[Chunk]
+# ]
 
 
 @EventModelFactory.register(EventModel.OMP)
