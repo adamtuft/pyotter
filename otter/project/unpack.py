@@ -17,7 +17,6 @@ from otter.db.writers import (
     StringDefinitionWriter,
 )
 from otter.db.types import SourceLocation
-from otter.db.writers import ChunkWriter
 from otter.core.events import Event, Location
 from otter.core.event_model.event_model import (
     EventModel,
@@ -38,7 +37,6 @@ def process_trace(anchorfile: str, con: otter.db.Connection):
 
     otter.log.info("processing trace")
 
-    chunk_writer = ChunkWriter(con, bufsize=5000)
     task_meta_writer = TaskMetaWriter(con, string_id)
     task_action_writer = TaskActionWriter(con, source_location_id)
 
@@ -90,7 +88,6 @@ def process_trace(anchorfile: str, con: otter.db.Connection):
         )
 
         otter.log.info("building chunks")
-        otter.log.info("using chunk builder: %s", str(chunk_writer))
 
         # Push source & string writers before chunk & task builders so the
         # definitions get generated first, then flushed when the writers
@@ -99,14 +96,12 @@ def process_trace(anchorfile: str, con: otter.db.Connection):
         closing_resources = closing_all(
             string_writer,  # Must push before source_writer so all strings have been seen
             source_writer,
-            chunk_writer,
             task_meta_writer,
             task_action_writer,
         )
         with closing_resources:
             num_chunks = event_model.generate_chunks(
                 event_iter,
-                chunk_writer.insert,
                 task_meta_writer.add_task_metadata,
                 task_action_writer.add_task_action,
                 task_action_writer.add_task_suspend_meta,

@@ -12,7 +12,6 @@ from otter.db.protocols import (
 
 from otter.db.types import SourceLocation
 
-from otter.db.protocols import AppendToChunkCallback
 from otter.core.events import Event, Location
 from otter.core.tasks import TaskData
 from otter.definitions import (
@@ -82,6 +81,7 @@ task-leave:
 
 @EventModelFactory.register(EventModel.TASKGRAPH)
 class TaskGraphEventModel(BaseEventModel):
+
     def __init__(
         self,
         *args,
@@ -185,41 +185,13 @@ class TaskGraphEventModel(BaseEventModel):
     def generate_chunks(
         self,
         events_iter: TraceEventIterable,
-        append_to_chunk: AppendToChunkCallback,
         add_task_metadata_cbk: TaskMetaCallback,
         add_task_action_cbk: TaskActionCallback,
         add_task_suspend_meta_cbk: TaskSuspendMetaCallback,
     ):
         return super().generate_chunks(
             self._filter_with_callbacks(events_iter),
-            append_to_chunk,
             add_task_metadata_cbk,
             add_task_action_cbk,
             add_task_suspend_meta_cbk,
         )
-
-
-@TaskGraphEventModel.update_chunks_on(event_type=EventType.task_enter)
-def update_chunks_task_enter(
-    event: Event,
-    location: Location,
-    location_count: int,
-    append_to_chunk: AppendToChunkCallback,
-) -> Optional[int]:
-    task: int = event.encountering_task_id
-    assert task != NullTaskID
-    append_to_chunk(task, location.ref, location_count)
-    return None
-
-
-@TaskGraphEventModel.update_chunks_on(event_type=EventType.task_leave)
-def update_chunks_task_leave(
-    event: Event,
-    location: Location,
-    location_count: int,
-    append_to_chunk: AppendToChunkCallback,
-) -> Optional[int]:
-    task: int = event.encountering_task_id
-    assert task != NullTaskID
-    append_to_chunk(task, location.ref, location_count)
-    return task

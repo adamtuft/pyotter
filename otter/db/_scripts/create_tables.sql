@@ -65,14 +65,6 @@ create table string(
     primary key (id)
 );
 
--- List the location_ref and local event positions contained in each chunk
-create table chunk_contents(
-    chunk_key int not null,
-    location_ref int not null,
-    event_pos int not null,
-    primary key (chunk_key, location_ref, event_pos)
-);
-
 -- 
 create table critical_task(
     id int not null,

@@ -2,16 +2,7 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 
-from typing import (
-    Any,
-    Deque,
-    Dict,
-    Iterable,
-    List,
-    Optional,
-    Protocol,
-    Tuple,
-)
+from typing import Dict, Iterable, Tuple
 
 import otter.log
 import otter
@@ -21,87 +12,17 @@ from otter.db.protocols import (
     TaskMetaCallback,
     TaskActionCallback,
     TaskSuspendMetaCallback,
-    AppendToChunkCallback,
 )
 from otter.core.events import Event, Location
 from otter.core.tasks import TaskData
-from otter.definitions import (
-    EventModel,
-    EventType,
-    NullTaskID,
-    RegionType,
-    TaskAction,
-    TaskSyncType,
-)
-from otter.utils.typing import Decorator
+from otter.definitions import EventModel, NullTaskID, TaskAction, TaskSyncType
 
 # Type hint aliases
-EventList = List[Event]
 TraceEventIterable = Iterable[Tuple[Location, int, Event]]
-ChunkUpdateHandlerKey = Tuple[Optional[RegionType], EventType]
-
-
-class ChunkUpdateHandlerFn(Protocol):
-    def __call__(
-        self,
-        event: Event,
-        location: Location,
-        location_count: int,
-        append_to_chunk: AppendToChunkCallback,
-    ) -> Optional[int]: ...
 
 
 # Using ABC for a common __init__ between concrete models
 class BaseEventModel(ABC):
-
-    def __init_subclass__(cls):
-        # Add to the subclass a dict for registering handlers to update chunks & return completed chunks
-        cls.chunk_update_handlers: Dict[ChunkUpdateHandlerKey, ChunkUpdateHandlerFn] = (
-            {}
-        )
-
-    @classmethod
-    def update_chunks_on(
-        cls, event_type: EventType, region_type: RegionType = None
-    ) -> Decorator[ChunkUpdateHandlerFn]:
-        """
-        Register a function which will be called to update the relevant chunks when a matching event is encountered.
-        Some events use both region type and event type in the key, others use just the event type. Handlers are first
-        looked up by region type and event type, falling back to just the event type if no handler is found in the first
-        case.
-
-        Args:
-            event_type: the type of event for which this callback should be invoked
-            region_type: the region type of the event for which this callback should be invoked
-
-        Returns:
-            A decorator which registers the decorated function to be called when a matching event is encountered.
-
-        """
-
-        def decorator(handler: ChunkUpdateHandlerFn) -> ChunkUpdateHandlerFn:
-            key = cls.make_chunk_update_handlers_key(event_type, region_type)
-            assert key not in cls.chunk_update_handlers
-            cls.chunk_update_handlers[key] = handler
-            return handler
-
-        return decorator
-
-    @classmethod
-    def get_update_chunk_handler(cls, event: Event) -> Optional[ChunkUpdateHandlerFn]:
-        return cls.chunk_update_handlers.get((None, event.event_type))
-
-    @classmethod
-    def get_chunk_update_handlers_key(
-        cls, event: Event, fallback: bool = False
-    ) -> ChunkUpdateHandlerKey:
-        return cls.make_chunk_update_handlers_key(event.event_type)
-
-    @staticmethod
-    def make_chunk_update_handlers_key(
-        event_type: EventType, region_type: Optional[RegionType] = None
-    ) -> ChunkUpdateHandlerKey:
-        return region_type, event_type
 
     @abstractmethod
     def event_completes_chunk(self, event: Event) -> bool:
@@ -167,10 +88,18 @@ class BaseEventModel(ABC):
     def get_task_entered(event: Event) -> int:
         raise NotImplementedError()
 
+    @abstractmethod
+    def get_task_registered_data(self, event: Event) -> TaskData:
+        raise NotImplementedError()
+
+    @abstractmethod
+    def get_source_location(self, event: Event) -> SourceLocation:
+        """Get the source location of this event"""
+        raise NotImplementedError()
+
     def generate_chunks(
         self,
         events_iter: TraceEventIterable,
-        append_to_chunk: AppendToChunkCallback,
         add_task_metadata_cbk: TaskMetaCallback,
         add_task_action_cbk: TaskActionCallback,
         add_task_suspend_meta_cbk: TaskSuspendMetaCallback,
@@ -187,22 +116,6 @@ class BaseEventModel(ABC):
                 location_count,
                 event,
             )
-
-            # Update the appropriate chunk
-            handler = self.get_update_chunk_handler(event)
-            if self.event_completes_chunk(event):
-                assert handler is not None
-                handler(event, location, location_count, append_to_chunk)
-                num_chunks += 1
-            elif self.event_updates_chunk(event):
-                assert handler is not None
-                handler(event, location, location_count, append_to_chunk)
-            elif self.event_skips_chunk_update(event):
-                pass
-            else:  # event applies default chunk update logic
-                self.append_to_encountering_task_chunk(
-                    event, location, location_count, append_to_chunk
-                )
 
             # Update the task builder
             if self.is_task_register_event(event):
@@ -264,24 +177,6 @@ class BaseEventModel(ABC):
         otter.log.info(f"read %d events", total_events)
 
         return num_chunks
-
-    def append_to_encountering_task_chunk(
-        self,
-        event: Event,
-        location: Location,
-        location_count: int,
-        append_to_chunk: AppendToChunkCallback,
-    ) -> None:
-        append_to_chunk(event.encountering_task_id, location.ref, location_count)
-
-    @abstractmethod
-    def get_task_registered_data(self, event: Event) -> TaskData:
-        raise NotImplementedError()
-
-    @abstractmethod
-    def get_source_location(self, event: Event) -> SourceLocation:
-        """Get the source location of this event"""
-        raise NotImplementedError()
 
 
 class EventModelFactory:
