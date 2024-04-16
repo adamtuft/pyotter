@@ -45,13 +45,14 @@ class Connection(sqlite3.Connection):
         if initialise:
             self.initialise()
 
-    def initialise(self):
+    def initialise(self, /, *, views: bool = False):
         self.info(" -- create tables")
         self.executescript(scripts["create_tables"])
         self.info(" -- create indexes")
         self.executescript(scripts["create_indexes"])
-        self.info(" -- create views")
-        self.executescript(scripts["create_views"])
+        if views:
+            self.info(" -- create views")
+            self.executescript(scripts["create_views"])
         return self
 
     def finalise(self):
