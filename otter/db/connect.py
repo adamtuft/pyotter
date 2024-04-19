@@ -2,34 +2,38 @@ from __future__ import annotations
 
 import os
 import sqlite3
+from abc import ABC, abstractmethod
+from contextlib import ExitStack
+from enum import Enum, auto
 from functools import lru_cache
-from typing import (
-    Generator,
-    List,
-    Tuple,
-    Union,
-    Sequence,
-    Callable,
-)
+from pathlib import Path
+from typing import Generator, List, Tuple, Union, Sequence, Callable, Dict
 
 import otter.log
 
+from otter.log import Loggable
+from otter.utils import LabellingDict
+
+from .scripts import scripts
 from .types import (
     SourceLocation,
     TaskAttributes,
     Task,
     TaskSchedulingState,
 )
+from .writers import TaskActionWriter, TaskMetaWriter, SourceLocationWriter, StringDefinitionWriter
 
-from .scripts import scripts
+
+class Mode(Enum):
+    READ = auto()
+    WRITE = auto()
+    SIMULATE = auto()
 
 
 class Connection(sqlite3.Connection):
     """Implements the connection to and operations on an Otter task database"""
 
-    def __init__(
-        self, db: str, overwrite: bool = False, initialise: bool = False, **kwargs
-    ):
+    def __init__(self, db: str, overwrite: bool = False, initialise: bool = False, **kwargs):
         prefix = f"[{self.__class__.__name__}]"
         self.warning = otter.log.log_with_prefix(prefix, otter.log.warning)
         self.debug = otter.log.log_with_prefix(prefix, otter.log.debug)
@@ -119,9 +123,7 @@ class Connection(sqlite3.Connection):
         cur = self.execute(scripts["get_descendants"], (task,))
         return [task for (task,) in cur]
 
-    def _make_task_attr(
-        self, label: str, create: int, start: int, end: int
-    ) -> TaskAttributes:
+    def _make_task_attr(self, label: str, create: int, start: int, end: int) -> TaskAttributes:
         return TaskAttributes(
             label,
             self.get_source_location(create),
@@ -209,9 +211,7 @@ class Connection(sqlite3.Connection):
     ) -> List[Tuple[int, str]]:
         """Return the children created between the given start & end times"""
 
-        query = scripts["get_children_created_between"].format(
-            start_ts=start_ts, end_ts=end_ts
-        )
+        query = scripts["get_children_created_between"].format(start_ts=start_ts, end_ts=end_ts)
         cur = self.execute(query, (task,))
         return list(cur)
 
@@ -237,3 +237,66 @@ class Connection(sqlite3.Connection):
                 f"{desc.end_location.file}:{desc.end_location.line}",
                 sep=sep,
             )
+
+
+class ConnectionBase(ABC, Loggable):
+
+    @abstractmethod
+    def __enter__(self): ...
+
+    @abstractmethod
+    def __exit__(self, ex_type, ex, tb): ...
+
+
+class ReadConnection(ConnectionBase):
+    pass
+
+
+class WriteConnection(ConnectionBase):
+
+    def __init__(self, root_path: Path, /, *, views: bool = False) -> None:
+        self.views = views
+        dbpath = root_path / "aux" / "tasks.db"
+        if dbpath.exists():
+            self.log_warning("overwriting tasks database %s", dbpath)
+            dbpath.unlink()
+        self._con = sqlite3.connect(dbpath)
+        source_location_id: Dict[SourceLocation, int] = LabellingDict()
+        string_id: Dict[str, int] = LabellingDict()
+        self._task_meta_writer = TaskMetaWriter(self._con, string_id, bufsize=1000000)
+        self._task_action_writer = TaskActionWriter(self._con, source_location_id, bufsize=1000000)
+        self._exit = ExitStack()
+        # Must push string writer before source writer so all strings have been seen when string writer closed
+        self._exit.enter_context(StringDefinitionWriter(self._con, string_id))
+        self._exit.enter_context(SourceLocationWriter(self._con, string_id, source_location_id))
+        self._exit.enter_context(self._task_meta_writer)
+        self._exit.enter_context(self._task_action_writer)
+
+    def __enter__(self):
+        self.log_info(" -- create tables")
+        self._con.executescript(scripts["create_tables"])
+        self.log_info(" -- create indexes")
+        self._con.executescript(scripts["create_indexes"])
+        if self.views:
+            self.log_info(" -- create views")
+            self._con.executescript(scripts["create_views"])
+        return (
+            self._task_meta_writer.add_task_metadata,
+            self._task_action_writer.add_task_action,
+            self._task_action_writer.add_task_suspend_meta,
+        )
+
+    def __exit__(self, ex_type, ex, tb):
+        if ex_type is None:
+            self.log_info(" -- close writers")
+            self._exit.close()
+            self.log_info(" -- update task locations and timestamps")
+            self._con.executescript(scripts["update_task_locations_times"])
+            self.log_info(" -- count children")
+            self._con.executescript(scripts["update_task_num_children"])
+            self.log_info(" -- update source location definitions")
+            self._con.executescript(scripts["update_source_info"])
+            return True
+        else:
+            self.log_error("database not finalised due to unhandled exception")
+            return False
