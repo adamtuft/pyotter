@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from contextlib import ExitStack
+from pathlib import Path
 from typing import Dict
 from time import time
 
@@ -8,42 +9,29 @@ import otf2_ext
 
 import otter.log
 import otter.db
-import otter.simulator
 
 from otter.definitions import TraceAttr
-from otter.db.writers import (
-    TaskMetaWriter,
-    TaskActionWriter,
-    SourceLocationWriter,
-    StringDefinitionWriter,
-)
-from otter.db.types import SourceLocation
+from otter.db.protocols import TaskMetaCallback, TaskActionCallback, TaskSuspendMetaCallback
 from otter.core.events import Event, Location
 from otter.core.event_model.event_model import (
     EventModel,
     TraceEventIterable,
     get_event_model,
 )
-from otter.utils.context import closing_all
-from otter.utils import CountingDict, LabellingDict
+from otter.utils import CountingDict
 
 from .project import Project
 
 
-def process_trace(anchorfile: str, con: otter.db.Connection):
+def process_trace(
+    anchorfile: str,
+    task_meta_callback: TaskMetaCallback,
+    task_action_callback: TaskActionCallback,
+    task_suspend_callback: TaskSuspendMetaCallback,
+):
     """Read a trace and create a database of tasks"""
 
-    source_location_id: Dict[SourceLocation, int] = LabellingDict()
-    string_id: Dict[str, int] = LabellingDict()
-
     otter.log.info("processing trace")
-
-    task_meta_writer = TaskMetaWriter(con, string_id, bufsize=1000000)
-    task_action_writer = TaskActionWriter(con, source_location_id, bufsize=1000000)
-
-    # Write definitions to the database
-    source_writer = SourceLocationWriter(con, string_id, source_location_id)
-    string_writer = StringDefinitionWriter(con, string_id)
 
     # Build the tasks data
     with ExitStack() as outer:
@@ -88,32 +76,15 @@ def process_trace(anchorfile: str, con: otter.db.Connection):
             for location, event in global_event_reader
         )
 
-        # Push source & string writers before task builders so the
-        # definitions get generated first, then flushed when the writers
-        # are closed.
-        # NOTE: order is important!
-        closing_resources = closing_all(
-            string_writer,  # Must push before source_writer so all strings have been seen
-            source_writer,
-            task_meta_writer,
-            task_action_writer,
+        otter.log.info("extracting task data...")
+        start = time()
+        events_count = event_model.apply_callbacks(
+            event_iter, task_meta_callback, task_action_callback, task_suspend_callback
         )
-        with closing_resources:
-            otter.log.info("extracting task data...")
-            start = time()
-            events_count = event_model.apply_callbacks(
-                event_iter,
-                task_meta_writer.add_task_metadata,
-                task_action_writer.add_task_action,
-                task_action_writer.add_task_suspend_meta,
-            )
-            end = time()
-            dt = end - start
-            eps = events_count / dt
-            otter.log.info(
-                f"read {events_count} events in {dt:.3f}s ({eps:.3g} events/sec)"
-            )
-            otter.log.info("finalise definitions...")
+        end = time()
+        dt = end - start
+        eps = events_count / dt
+        otter.log.info(f"read {events_count} events in {dt:.3f}s ({eps:.3g} events/sec)")
 
 
 def unpack_trace(anchorfile: str, debug: bool = False) -> None:
@@ -122,6 +93,5 @@ def unpack_trace(anchorfile: str, debug: bool = False) -> None:
     otter.log.info("using OTF2 python version %s", otf2_ext.version)
 
     project = Project(anchorfile, debug=debug)
-    with project.prepare_connection() as con:
-        process_trace(project.anchorfile, con)
-        otter.log.info("finalise database...")
+    with otter.db.WriteConnection(Path(project.project_root)) as writer_callbacks:
+        process_trace(project.anchorfile, *writer_callbacks)
