@@ -1,16 +1,14 @@
 from otter.definitions import TaskAction
 
-from ..connect import Connection
+from sqlite3 import Connection
 
 from .buffered_writers import BufferedDBWriter
 
 
 class ScheduleWriter(BufferedDBWriter):
 
-    def __init__(
-        self, con: Connection, bufsize: int = 1000, overwrite: bool = True
-    ) -> None:
-        super().__init__(con, "sim_task_history", 4, bufsize, overwrite)
+    def __init__(self, con: Connection, bufsize: int = 1000) -> None:
+        super().__init__(con, "sim_task_history", 4, bufsize)
 
     def insert(
         self,

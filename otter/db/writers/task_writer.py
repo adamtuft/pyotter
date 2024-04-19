@@ -1,33 +1,24 @@
 from typing import Dict, Optional
+from sqlite3 import Connection
 
 from otter.definitions import TaskAction
 
-import otter.log
-
 from ..types import SourceLocation
-from ..connect import Connection
+from .writer_base import WriterBase
 from .buffered_writers import BufferedDBWriter
 
 
-class TaskMetaWriter:
+class TaskMetaWriter(WriterBase):
 
     def __init__(
         self,
         con: Connection,
         string_id_lookup: Dict[str, int],
         bufsize: int = 1000,
-        overwrite: bool = True,
     ) -> None:
-        self.debug = otter.log.log_with_prefix(
-            f"[{self.__class__.__name__}]", otter.log.debug
-        )
         self._string_id_lookup = string_id_lookup
-        self._task_meta = BufferedDBWriter(
-            con, "task", 10, bufsize=bufsize, overwrite=overwrite
-        )
-        self._task_links = BufferedDBWriter(
-            con, "task_relation", 2, bufsize=bufsize, overwrite=overwrite
-        )
+        self._task_meta = BufferedDBWriter(con, "task", 10, bufsize=bufsize)
+        self._task_links = BufferedDBWriter(con, "task_relation", 2, bufsize=bufsize)
 
     def add_task_metadata(self, task: int, parent: Optional[int], label: str) -> None:
         self._task_meta.insert(
@@ -46,30 +37,22 @@ class TaskMetaWriter:
             self._task_links.insert(parent, task)
 
     def close(self):
-        self.debug("closing...")
+        self.log_debug("closing...")
         self._task_meta.close()
         self._task_links.close()
 
 
-class TaskActionWriter:
+class TaskActionWriter(WriterBase):
 
     def __init__(
         self,
         con: Connection,
         source_location_id: Dict[SourceLocation, int],
         bufsize: int = 1000,
-        overwrite: bool = True,
     ) -> None:
-        self.debug = otter.log.log_with_prefix(
-            f"[{self.__class__.__name__}]", otter.log.debug
-        )
         self._source_location_id = source_location_id
-        self._task_actions = BufferedDBWriter(
-            con, "task_history", 7, bufsize=bufsize, overwrite=overwrite
-        )
-        self._task_suspend_meta = BufferedDBWriter(
-            con, "task_suspend_meta", 4, bufsize=bufsize, overwrite=overwrite
-        )
+        self._task_actions = BufferedDBWriter(con, "task_history", 7, bufsize=bufsize)
+        self._task_suspend_meta = BufferedDBWriter(con, "task_suspend_meta", 4, bufsize=bufsize)
 
     def add_task_action(
         self,
@@ -91,9 +74,7 @@ class TaskActionWriter:
             location_count,
         )
 
-    def add_task_suspend_meta(
-        self, task: int, time: str, sync_descendants: bool
-    ) -> None:
+    def add_task_suspend_meta(self, task: int, time: str, sync_descendants: bool) -> None:
         self._task_suspend_meta.insert(
             0,  # branch of task meta history
             task,
@@ -102,6 +83,6 @@ class TaskActionWriter:
         )
 
     def close(self):
-        self.debug("closing...")
+        self.log_debug("closing...")
         self._task_actions.close()
         self._task_suspend_meta.close()
