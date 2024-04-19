@@ -121,3 +121,22 @@ def log_with_prefix(prefix, logging_func, sep=" "):
         logging_func(prefix + sep + msg, *args)
 
     return wrapper
+
+
+class Loggable:
+
+    @classmethod
+    def log_debug(cls: type, msg: str, *args):
+        debug(f"[{cls.__name__}] {msg}", *args)
+
+    @classmethod
+    def log_info(cls: type, msg: str, *args):
+        info(f"[{cls.__name__}] {msg}", *args)
+
+    @classmethod
+    def log_warning(cls: type, msg: str, *args):
+        warning(f"[{cls.__name__}] {msg}", *args)
+
+    @classmethod
+    def log_error(cls: type, msg: str, *args):
+        error(f"[{cls.__name__}] {msg}", *args)
