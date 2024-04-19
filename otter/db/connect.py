@@ -4,7 +4,6 @@ import os
 import sqlite3
 from abc import ABC, abstractmethod
 from contextlib import ExitStack
-from enum import Enum, auto
 from functools import lru_cache
 from pathlib import Path
 from typing import Generator, List, Tuple, Union, Sequence, Callable, Dict
@@ -22,12 +21,6 @@ from .types import (
     TaskSchedulingState,
 )
 from .writers import TaskActionWriter, TaskMetaWriter, SourceLocationWriter, StringDefinitionWriter
-
-
-class Mode(Enum):
-    READ = auto()
-    WRITE = auto()
-    SIMULATE = auto()
 
 
 class Connection(sqlite3.Connection):
