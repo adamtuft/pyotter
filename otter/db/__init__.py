@@ -1,4 +1,6 @@
 from . import scripts
 from . import writers
-from .connect import Connection, WriteConnection
+from .read_connection import ReadConnection
+from .write_connection import WriteConnection
+from .write_sim_connection import WriteSimConnection
 from .types import TaskAttributes, Task
