@@ -23,9 +23,10 @@ class TaskActionCallback(Protocol):
         action: TaskAction,
         time: str,
         source_location: SourceLocation,
-        location_ref: int,
-        location_count: int,
         /,
+        *,
+        location_ref: Optional[int] = None,
+        location_count: Optional[int] = None,
     ) -> None: ...
 
 
@@ -33,6 +34,12 @@ class TaskSuspendMetaCallback(Protocol):
     """Callback used to dispatch metadata about task-suspend actions"""
 
     def __call__(self, task: int, time: str, sync_descendants: bool) -> None: ...
+
+
+class CriticalTaskCallback(Protocol):
+    """Callback used to notify that a given child is the critical task during part of a parent's execution"""
+
+    def __call__(self, task: int, sequence: int, critical_child: int, /, *args) -> None: ...
 
 
 class EventReaderProtocol(Protocol):
