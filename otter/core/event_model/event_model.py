@@ -126,8 +126,8 @@ class BaseEventModel(ABC):
                     TaskAction.CREATE,
                     str(event.time),
                     task.create_location,
-                    location.ref,
-                    location_count,
+                    location_ref=location.ref,
+                    location_count=location_count,
                 )
             if self.is_update_task_start_ts_event(event):
                 add_task_action_cbk(
@@ -135,8 +135,8 @@ class BaseEventModel(ABC):
                     TaskAction.START,
                     str(event.time),
                     self.get_source_location(event),
-                    location.ref,
-                    location_count,
+                    location_ref=location.ref,
+                    location_count=location_count,
                 )
             if self.is_task_complete_event(event):
                 add_task_action_cbk(
@@ -144,8 +144,8 @@ class BaseEventModel(ABC):
                     TaskAction.END,
                     str(event.time),
                     self.get_source_location(event),
-                    location.ref,
-                    location_count,
+                    location_ref=location.ref,
+                    location_count=location_count,
                 )
             if self.is_task_suspend_event(event):
                 add_task_action_cbk(
@@ -153,8 +153,8 @@ class BaseEventModel(ABC):
                     TaskAction.SUSPEND,
                     str(event.time),
                     self.get_source_location(event),
-                    location.ref,
-                    location_count,
+                    location_ref=location.ref,
+                    location_count=location_count,
                 )
                 add_task_suspend_meta_cbk(
                     event.encountering_task_id,
@@ -167,8 +167,8 @@ class BaseEventModel(ABC):
                     TaskAction.RESUME,
                     str(event.time),
                     self.get_source_location(event),
-                    location.ref,
-                    location_count,
+                    location_ref=location.ref,
+                    location_count=location_count,
                 )
 
             total_events = k
