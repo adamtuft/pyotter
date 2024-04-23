@@ -21,7 +21,8 @@ import otf2_ext
 
 import otter.log as log
 import otter
-from otter.core.chunk_reader import ChunkReaderProtocol, DBChunkReader
+from otter.db.protocols import EventReaderProtocol
+from otter.db.event_reader import EventReader
 from otter.core.events import Event
 from otter.definitions import EventType
 
@@ -110,8 +111,7 @@ class TaskSchedulingCallback(Protocol):
         task: int,
         resumable: List[int],
         schedulable: List[int],
-    ) -> Optional[int]:
-        ...
+    ) -> Optional[int]: ...
 
 
 TaskSchedulingPolicy = Dict[TSP, TaskSchedulingCallback]
@@ -202,9 +202,9 @@ class TaskPool:
 
         self._ready_tasks.remove(task)
 
-        task, parent, num_children, create_ts, start_ts, end_ts, attr = self.con.task_attributes(
-            task
-        )[0]
+        task, parent, num_children, create_ts, start_ts, end_ts, attr = (
+            self.con.get_tasks(task)[0]
+        )
 
         chunk = self.chunk_reader.get_chunk(task)
 
@@ -711,7 +711,7 @@ if __name__ == "__main__":
         con = ctx.enter_context(project.connection())
         reader = ctx.enter_context(otf2_ext.open_trace(args.anchorfile))
         seek_events = ctx.enter_context(reader.seek_events())
-        chunk_reader = DBChunkReader(reader.attributes, seek_events, con)
+        chunk_reader = ChunkReader(reader.attributes, seek_events, con)
         policy = {
             TSP.CREATE: on_create,
             TSP.SUSPEND: on_suspend,
