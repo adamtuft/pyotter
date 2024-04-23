@@ -34,7 +34,7 @@ def _select_action(args) -> None:
 
     with otter.profile.output(args.profile):
         if args.action == Action.UNPACK:
-            otter.project.unpack_trace(args.anchorfile, debug=debug)
+            otter.project.unpack_trace(args.anchorfile, overwrite=args.force)
         elif args.action == Action.SHOW:
             if args.show == GraphType.CFG:
                 otter.project.show_control_flow_graph(
@@ -46,9 +46,7 @@ def _select_action(args) -> None:
                     debug=debug,
                 )
             elif args.show == GraphType.HIER:
-                otter.project.show_task_hierarchy(
-                    args.anchorfile, args.dotfile, debug=debug
-                )
+                otter.project.show_task_hierarchy(args.anchorfile, args.dotfile, debug=debug)
             elif args.show == GraphType.TREE:
                 otter.project.show_task_tree(
                     args.anchorfile, args.dotfile, debug=debug, rankdir=args.rankdir
@@ -57,15 +55,11 @@ def _select_action(args) -> None:
                 otter.log.error(f"unknown graph type: {args.show}")
                 raise SystemExit(1)
         elif args.action == Action.SUMMARY:
-            otter.project.summarise_tasks_db(
-                args.anchorfile, args.summarise, debug=debug
-            )
+            otter.project.summarise_tasks_db(args.anchorfile, args.summarise, debug=debug)
         elif args.action == Action.FILTER:
-            otter.project.print_filter_to_stdout(
-                bool(args.include), args.include or args.exclude
-            )
+            otter.project.print_filter_to_stdout(bool(args.include), args.include or args.exclude)
         elif args.action == Action.SIMULATE:
-            otter.project.simulate_schedule(args.anchorfile, debug=debug)
+            otter.project.simulate_schedule(args.anchorfile)
         else:
             print(f"unknown action: {args.action}")
             otter.args.print_help()
