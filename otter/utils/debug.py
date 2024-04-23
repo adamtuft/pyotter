@@ -1,21 +1,22 @@
 import inspect
 import sys
 import pdb
-from contextlib import contextmanager
+from contextlib import contextmanager, nullcontext
+
+
+def post_mortem(catch: bool):
+    return post_mortem_context() if catch else nullcontext()
 
 
 @contextmanager
-def post_mortem(catch: bool):
-    if catch:
-        try:
-            yield
-        except Exception:
-            exc_type, exc, tb = sys.exc_info()
-            print(exc)
-            print(f"caught {exc_type}, entering post-mortem")
-            pdb.post_mortem(tb)
-    else:
+def post_mortem_context():
+    try:
         yield
+    except Exception:
+        exc_type, exc, tb = sys.exc_info()
+        print(exc)
+        print(f"caught {exc_type}, entering post-mortem")
+        pdb.post_mortem(tb)
 
 
 # Credit: https://stackoverflow.com/a/72782654
