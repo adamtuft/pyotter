@@ -1,6 +1,7 @@
 from typing import Dict, Optional
 from sqlite3 import Connection
 
+from otter.log import is_debug_enabled
 from otter.definitions import TaskAction
 
 from ..types import SourceLocation
@@ -45,14 +46,11 @@ class TaskMetaWriter(WriterBase):
 class TaskActionWriter(WriterBase):
 
     def __init__(
-        self,
-        con: Connection,
-        source_location_id: Dict[SourceLocation, int],
-        bufsize: int = 1000,
+        self, con: Connection, /, *, source: Dict[SourceLocation, int], bufsize: int = 1000
     ) -> None:
-        self._source_location_id = source_location_id
-        self._task_actions = BufferedDBWriter(con, "task_history", 7, bufsize=bufsize)
-        self._task_suspend_meta = BufferedDBWriter(con, "task_suspend_meta", 4, bufsize=bufsize)
+        self._source = source
+        self._task_actions = BufferedDBWriter(con, "task_history", 6, bufsize=bufsize)
+        self._task_suspend_meta = BufferedDBWriter(con, "task_suspend_meta", 3, bufsize=bufsize)
 
     def add_task_action(
         self,
@@ -60,23 +58,22 @@ class TaskActionWriter(WriterBase):
         action: TaskAction,
         time: str,
         source_location: SourceLocation,
-        location_ref: int,
-        location_count: int,
         /,
+        *,
+        location_ref: Optional[int],
+        location_count: Optional[int],
     ) -> None:
         self._task_actions.insert(
-            0,  # branch of history
             task,
             action,
             time,
-            self._source_location_id[source_location],
+            self._source[source_location],
             location_ref,
             location_count,
         )
 
     def add_task_suspend_meta(self, task: int, time: str, sync_descendants: bool) -> None:
         self._task_suspend_meta.insert(
-            0,  # branch of task meta history
             task,
             time,
             int(sync_descendants),
@@ -86,3 +83,76 @@ class TaskActionWriter(WriterBase):
         self.log_debug("closing...")
         self._task_actions.close()
         self._task_suspend_meta.close()
+
+
+class SimTaskActionWriter(WriterBase):
+
+    def __init__(
+        self,
+        con: Connection,
+        /,
+        *,
+        sim_id: int,
+        source: Dict[SourceLocation, int],
+        bufsize: int = 1000,
+    ) -> None:
+        self._source = source
+        self._sim_id = sim_id  # simulation ID
+        self._task_actions = BufferedDBWriter(con, "sim_task_history", 5, bufsize=bufsize)
+        self._task_suspend_meta = BufferedDBWriter(con, "sim_task_suspend_meta", 4, bufsize=bufsize)
+
+    def add_task_action(
+        self,
+        task: int,
+        action: TaskAction,
+        time: str,
+        source_location: SourceLocation,
+        /,
+        *,
+        location_ref: Optional[int] = None,
+        location_count: Optional[int] = None,
+    ) -> None:
+        self._task_actions.insert(
+            self._sim_id,
+            task,
+            action,
+            time,
+            self._source[source_location],
+        )
+
+    def add_task_suspend_meta(self, task: int, time: str, sync_descendants: bool) -> None:
+        self._task_suspend_meta.insert(
+            self._sim_id,
+            task,
+            time,
+            int(sync_descendants),
+        )
+
+    def close(self):
+        self.log_debug("closing...")
+        self._task_actions.close()
+        self._task_suspend_meta.close()
+
+    @classmethod
+    def clear_sim(cls, con: Connection, sim_id: int):
+        if is_debug_enabled():
+            (rows_deleted_hist,) = con.execute(
+                "select count(*) from sim_task_history where sim_id = ?;", (sim_id,)
+            )
+            cls.log_debug(
+                "deleting %d rows from sim_task_history where sim_id = %d",
+                rows_deleted_hist,
+                sim_id,
+            )
+        con.execute("delete from sim_task_history where sim_id = ?;", (sim_id,))
+        if is_debug_enabled():
+            (rows_deleted_meta,) = con.execute(
+                "select count(*) from sim_task_suspend_meta where sim_id = ?;", (sim_id,)
+            )
+            cls.log_debug(
+                "deleting %d rows from sim_task_suspend_meta where sim_id = %d",
+                rows_deleted_meta,
+                sim_id,
+            )
+        con.execute("delete from sim_task_suspend_meta where sim_id = ?;", (sim_id,))
+        con.commit()

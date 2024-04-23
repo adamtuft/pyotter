@@ -1,8 +1,6 @@
 from typing import List, Tuple, Any
 from sqlite3 import Connection
 
-from otter.log import is_debug_enabled
-
 from .writer_base import WriterBase
 
 
@@ -17,7 +15,6 @@ class BufferedDBWriter(WriterBase):
     ) -> None:
         placeholder = ",".join("?" * nargs)
         self.sql_insert_row = f"insert into {table} values({placeholder});"
-        self.sql_count_rows = f"select count(*) from {table};"
         self._con = con
         self._bufsize = bufsize
         self._buffer: List[Tuple[Any]] = []
@@ -29,9 +26,6 @@ class BufferedDBWriter(WriterBase):
 
     def close(self):
         self._flush()
-        if is_debug_enabled():
-            (rows,) = self._con.execute(self.sql_count_rows).fetchone()
-            self.log_debug("contains %d rows", rows)
 
     def _flush(self):
         self.log_debug(f"write {len(self._buffer)} records")
