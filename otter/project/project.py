@@ -1,74 +1,58 @@
 from __future__ import annotations
 
 import os
-from contextlib import contextmanager
+from abc import ABC, abstractmethod
+from pathlib import Path
 
-import otter.log
+from otter.log import Loggable
 import otter.db
 import otter.simulator
 
-from prettytable import PrettyTable
 
-
-class Project:
+class ProjectBase(ABC, Loggable):
     """Prepare to use an anchorfile as input"""
 
-    def __init__(self, anchorfile: str, debug: bool = False) -> None:
-
-        self.debug = debug
-        if self.debug:
-            otter.log.debug("using project: %s", self)
-
-        self.anchorfile = os.path.abspath(anchorfile)
-        if not os.path.isfile(self.anchorfile):
-            otter.log.error("no such file: %s", self.anchorfile)
-            raise SystemExit(1)
-
+    def __init__(self, anchorfile: str, /) -> None:
+        self.log_debug("using project: %s", self)
+        self.anchorfile = Path(anchorfile).resolve()
         self.project_root: str = os.path.dirname(self.anchorfile)
         self.aux_dir = "aux"
         self.maps_file = self.abspath(os.path.join(self.aux_dir, "maps"))
 
         if not os.path.isdir(self.abspath(self.aux_dir)):
-            otter.log.error("directory not found: %s", self.abspath(self.aux_dir))
+            self.log_error("directory not found: %s", self.abspath(self.aux_dir))
             raise SystemExit(1)
         if not os.path.isfile(self.maps_file):
-            otter.log.error("no such file: %s", self.maps_file)
+            self.log_error("no such file: %s", self.maps_file)
             raise SystemExit(1)
 
-        self.tasks_db = self.abspath(os.path.join(self.aux_dir, "tasks.db"))
-
-        otter.log.info("project root:  %s", self.project_root)
-        otter.log.info("anchorfile:    %s", self.anchorfile)
-        otter.log.info("maps file:     %s", self.maps_file)
-        otter.log.info("tasks:         %s", self.tasks_db)
+        self.log_info("project root:  %s", self.project_root)
+        self.log_info("anchorfile:    %s", self.anchorfile)
 
     def abspath(self, relname: str):
         """Get the absolute path of an internal folder"""
         return os.path.abspath(os.path.join(self.project_root, relname))
 
-    def connection(self, /, **kwargs):
-        """Return a connection to this project's tasks db"""
-        return otter.db.Connection(self.tasks_db, **kwargs)
-
-    @contextmanager
-    def prepare_connection(self, summarise: bool = True):
-        con = self.connection(overwrite=True, initialise=True)
-        otter.log.info("created database %s", self.tasks_db)
-        yield con
-        con.finalise()
-        con.commit()
-        if summarise:
-            table = PrettyTable(["Table/View", "Name", "Rows"], align="l")
-            table.add_rows(con.count_rows())
-            print(table)
-        con.close()
+    @abstractmethod
+    def connect(self, /, **kwargs): ...
 
 
-class ReadTraceData(Project):
+class UnpackTraceData(ProjectBase):
+
+    def connect(self, /, overwrite: bool):
+        return otter.db.WriteConnection(Path(self.project_root), overwrite=overwrite)
+
+
+class ReadTraceData(ProjectBase):
     """Read data from an unpacked trace"""
 
-    def __init__(self, anchorfile: str, debug: bool = False) -> None:
-        super().__init__(anchorfile, debug=debug)
-        if not os.path.isfile(self.tasks_db):
-            otter.log.error("no such file: %s", self.tasks_db)
-            raise SystemExit(1)
+    def connect(self, /):
+        """Return a connection to this project's tasks db"""
+        return otter.db.ReadConnection(Path(self.project_root))
+
+
+class SimulateTrace(ProjectBase):
+    """Read native trace data and write a simulated schedule"""
+
+    def connect(self, /):
+        return otter.db.WriteSimConnection(Path(self.project_root))
