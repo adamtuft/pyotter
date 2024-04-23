@@ -19,7 +19,7 @@ from .project import ReadTraceData
 
 
 def build_control_flow_graph(
-    con: otter.db.Connection, task: int, debug: bool, simple: bool = False
+    con: otter.db.ReadConnection, task: int, debug: bool, simple: bool = False
 ) -> ig.Graph:
     """Build a task's control-flow-graph"""
 
@@ -54,8 +54,8 @@ def build_control_flow_graph(
     )
     cur = head
 
-    task_states = con.task_scheduling_states((task,))
-    task_suspend_meta = dict(con.task_suspend_meta(task))
+    task_states = con.get_task_scheduling_states((task,))
+    task_suspend_meta = dict(con.get_task_suspend_meta(task))
 
     for state in task_states:
         actions = state.action_start, state.action_end
@@ -65,7 +65,7 @@ def build_control_flow_graph(
 
         debug_msg(f"{actions=}")
 
-        tasks_created = con.children_created_between(task, state.start_ts, state.end_ts)
+        tasks_created = con.get_children_created_between(task, state.start_ts, state.end_ts)
         if simple:
             child_vertices = [
                 graph.add_vertex(
@@ -181,7 +181,7 @@ def build_control_flow_graph(
 
 
 def style_graph(
-    con: otter.db.Connection,
+    con: otter.db.ReadConnection,
     graph: ig.Graph,
     label_data: List[Any],
     debug: bool = False,
@@ -244,7 +244,7 @@ def style_graph(
 def show_task_hierarchy(anchorfile: str, dotfile: str, debug: bool = False) -> None:
     """Show the task hierarchy of a trace"""
 
-    project = ReadTraceData(anchorfile, debug=debug)
+    project = ReadTraceData(anchorfile)
     otter.log.debug("project=%s", project)
 
     graph = ig.Graph(directed=True)
@@ -252,9 +252,9 @@ def show_task_hierarchy(anchorfile: str, dotfile: str, debug: bool = False) -> N
         lambda: graph.add_vertex(shape="plain", style="filled")
     )
 
-    with project.connection() as con:
+    with project.connect() as con:
         otter.log.debug("fetching data")
-        rows = con.parent_child_attributes()
+        rows = con.get_all_parent_child_attributes()
 
     if len(rows) == 0:
         otter.log.error("no task hierarchy data was returned")
@@ -281,9 +281,7 @@ def show_task_hierarchy(anchorfile: str, dotfile: str, debug: bool = False) -> N
     otter.reporting.write_graph_to_file(graph, filename=dotfile)
 
     otter.log.debug("converting dotfile to svg")
-    result, _, stderr, svgfile = otter.reporting.convert_dot_to_svg(
-        dotfile=dotfile, rankdir="LR"
-    )
+    result, _, stderr, svgfile = otter.reporting.convert_dot_to_svg(dotfile=dotfile, rankdir="LR")
     if result != 0:
         for line in stderr.splitlines():
             print(line, file=sys.stderr)
@@ -305,8 +303,8 @@ def show_control_flow_graph(
         dotfile = dotfile.format(task=task)
 
     otter.log.info(" --> STEP: create project")
-    project = ReadTraceData(anchorfile, debug=debug)
-    with project.connection() as con:
+    project = ReadTraceData(anchorfile)
+    with project.connect() as con:
         otter.log.info(" --> STEP: build cfg (task=%d)", task)
         cfg = build_control_flow_graph(con, task, debug=debug, simple=simple)
         if style:
@@ -317,9 +315,7 @@ def show_control_flow_graph(
     otter.log.info(" --> STEP: write cfg to file (dotfile=%s)", dotfile)
     otter.reporting.write_graph_to_file(cfg, filename=dotfile, drop=["attr", "foo"])
     otter.log.info(" --> STEP: convert to svg")
-    result, _, stderr, svgfile = otter.reporting.convert_dot_to_svg(
-        dotfile=dotfile, rankdir="TB"
-    )
+    result, _, stderr, svgfile = otter.reporting.convert_dot_to_svg(dotfile=dotfile, rankdir="TB")
     if result != 0:
         for line in stderr:
             print(line, file=sys.stderr)
@@ -327,11 +323,9 @@ def show_control_flow_graph(
         otter.log.info("cfg for task %d written to %s", task, svgfile)
 
 
-def show_task_tree(
-    anchorfile: str, dotfile: str, *, debug: bool = False, rankdir: str
-) -> None:
+def show_task_tree(anchorfile: str, dotfile: str, *, debug: bool = False, rankdir: str) -> None:
 
-    project = ReadTraceData(anchorfile, debug=debug)
+    project = ReadTraceData(anchorfile)
     otter.log.debug("project=%s", project)
 
     graph = ig.Graph(directed=True)
@@ -342,8 +336,8 @@ def show_task_tree(
     label_counter = CountingDict(start=1)
     colour = otter.reporting.colour_picker(cycle=True)
 
-    with project.connection() as con:
-        for task in con.tasks:
+    with project.connect() as con:
+        for task in con.iter_all_tasks():
             # count the number of times we see each label
             label_counter.increment(task.attr.label)
             vertex = vertices[task.id]
@@ -367,7 +361,7 @@ def show_task_tree(
     del vertex["_task_label"]
 
     num_vertices = len(graph.vs)
-    num_tasks = con.num_tasks()
+    num_tasks = con.count_tasks()
     if num_vertices != num_tasks:
         otter.log.error(
             "number of tasks (%d) and vertices (%d) don't match!",
