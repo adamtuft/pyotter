@@ -21,7 +21,6 @@ create table task(
 
 -- List actions of each task, using partial keys to enforce uniqueness of some actions
 create table task_history(
-    branch int not null,                 -- each branch is a separate history i.e. native and 1+ simulated histories
     id int not null,                     -- task ID
     action int not null,                 -- 
     time not null,                       -- time of action
@@ -33,11 +32,10 @@ create table task_history(
 
 -- List metadata about each task-suspend action
 create table task_suspend_meta(
-    branch int not null,   -- each branch is a separate history i.e. native and 1+ simulated histories
     id int not null,       -- task ID
     time not null,         -- time of action
     sync_descendants int not null,
-    primary key (branch, id, time)
+    primary key (id, time)
     foreign key (id) references task (id)
 );
 
@@ -69,10 +67,11 @@ create table string(
 
 -- 
 create table critical_task(
+    sim_id int not null,   -- partition the separate simulations
     id int not null,
     sequence int not null,
     critical_child int not null,
-    primary key (id, sequence)
+    primary key (sim_id, id, sequence)
     foreign key (id) references task (id)
 );
 
@@ -85,6 +84,7 @@ create table critical_task(
 
 -- List actions of each task, using partial keys to enforce uniqueness of some actions
 create table sim_task_history(
+    sim_id int not null,   -- partition the separate simulations
     id int not null,       -- task ID
     action int not null,   -- 
     time not null,         -- time of action
@@ -94,9 +94,10 @@ create table sim_task_history(
 
 -- List metadata about each task-suspend action in a simulated schedule
 create table sim_task_suspend_meta(
+    sim_id int not null,   -- partition the separate simulations
     id int not null,       -- task ID
     time not null,         -- time of action
     sync_descendants int not null,
-    primary key (id, time)
+    primary key (sim_id, id, time)
     foreign key (id) references task (id)
 );
