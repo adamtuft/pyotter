@@ -20,11 +20,11 @@ from otter.core.event_model.event_model import (
 )
 from otter.utils import CountingDict
 
-from .project import Project
+from .project import UnpackTraceData
 
 
 def process_trace(
-    anchorfile: str,
+    anchorfile: Path,
     task_meta_callback: TaskMetaCallback,
     task_action_callback: TaskActionCallback,
     task_suspend_callback: TaskSuspendMetaCallback,
@@ -35,7 +35,7 @@ def process_trace(
 
     # Build the tasks data
     with ExitStack() as outer:
-        reader = outer.enter_context(otf2_ext.open_trace(anchorfile))
+        reader = outer.enter_context(otf2_ext.open_trace(str(anchorfile)))
 
         otter.log.info("recorded trace version: %s", reader.trace_version)
 
@@ -87,11 +87,16 @@ def process_trace(
         otter.log.info(f"read {events_count} events in {dt:.3f}s ({eps:.3g} events/sec)")
 
 
-def unpack_trace(anchorfile: str, debug: bool = False) -> None:
+def unpack_trace(anchorfile: str, /, *, overwrite: bool) -> None:
     """unpack a trace into a database for querying"""
 
     otter.log.info("using OTF2 python version %s", otf2_ext.version)
 
-    project = Project(anchorfile, debug=debug)
-    with otter.db.WriteConnection(Path(project.project_root)) as writer_callbacks:
+    project = UnpackTraceData(anchorfile)
+    try:
+        con = project.connect(overwrite=overwrite)
+    except FileExistsError as err:
+        otter.log.error("file exists: %s", str(err))
+        raise SystemExit(1)
+    with con as writer_callbacks:
         process_trace(project.anchorfile, *writer_callbacks)
