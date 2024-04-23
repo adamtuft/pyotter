@@ -6,12 +6,7 @@ from typing import Generator, List, Tuple, Sequence
 
 from .connect_base import Mode, ConnectionBase
 from .scripts import scripts
-from .types import (
-    SourceLocation,
-    TaskAttributes,
-    Task,
-    TaskSchedulingState,
-)
+from .types import SourceLocation, TaskAttributes, Task, TaskSchedulingState
 
 
 class ReadConnection(ConnectionBase):
