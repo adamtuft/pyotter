@@ -23,6 +23,7 @@ class Summarise(str, Enum):
     SOURCE = "source"
     TASKS = "tasks"
     STRINGS = "strings"
+    SIMS = "sims"
 
 
 class GraphType(str, Enum):
@@ -123,6 +124,7 @@ def add_common_arguments(parser: argparse.ArgumentParser) -> None:
     logging_levels = ["debug", "info", "warn", "error"]
 
     parser.add_argument(
+        "-l",
         "--loglevel",
         dest="loglevel",
         default="warn",
@@ -132,6 +134,7 @@ def add_common_arguments(parser: argparse.ArgumentParser) -> None:
     )
 
     parser.add_argument(
+        "-p",
         "--profile",
         dest="profile",
         metavar="file",
@@ -166,6 +169,13 @@ def prepare_parser_unpack(parent: argparse._SubParsersAction[argparse.ArgumentPa
         help=description_action[Action.UNPACK],
         description=description_action[Action.UNPACK],
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
+    )
+    parse_action_unpack.add_argument(
+        "-f",
+        "--force",
+        help="replace an existing database",
+        action="store_true",
+        default=False,
     )
     add_anchorfile_argument(parse_action_unpack)
     add_common_arguments(parse_action_unpack)
@@ -275,8 +285,7 @@ def prepare_parser_filter(parent: argparse._SubParsersAction[argparse.ArgumentPa
     parse_action_filter = parent.add_parser(
         Action.FILTER.value,
         help=description_action[Action.FILTER],
-        description=description_action[Action.FILTER]
-        + extra_description_action[Action.FILTER],
+        description=description_action[Action.FILTER] + extra_description_action[Action.FILTER],
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
     filter_group = parse_action_filter.add_mutually_exclusive_group(required=True)
@@ -322,9 +331,7 @@ def prepare_parser():
     )
 
     # subparsers for each action (unpack, show, ...)
-    subparse_action = parser.add_subparsers(
-        dest="action", metavar="action", required=False
-    )
+    subparse_action = parser.add_subparsers(dest="action", metavar="action", required=False)
     add_common_arguments(parser)
 
     prepare_parser_unpack(subparse_action)
