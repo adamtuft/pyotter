@@ -1,16 +1,12 @@
 from __future__ import annotations
 
-from contextlib import closing
+from otter.simulator import simulate_ideal
 
-import otter.log
-import otter.simulator
-
-from .project import ReadTraceData
+from .project import SimulateTrace
 
 
-def simulate_schedule(anchorfile: str, debug: bool = False) -> None:
-
-    project = ReadTraceData(anchorfile, debug)
-    with closing(project.connection()) as con:
-        otter.log.info(f"simulating trace {anchorfile}")
-        otter.simulator.simulate_ideal(con)
+def simulate_schedule(anchorfile: str) -> None:
+    project = SimulateTrace(anchorfile)
+    with project.connect() as sim_writer_callbacks:
+        project.log_info(f"simulating trace {anchorfile}")
+        simulate_ideal(project.reader, *sim_writer_callbacks)

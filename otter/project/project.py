@@ -54,5 +54,13 @@ class ReadTraceData(ProjectBase):
 class SimulateTrace(ProjectBase):
     """Read native trace data and write a simulated schedule"""
 
+    def __init__(self, anchorfile: str) -> None:
+        super().__init__(anchorfile)
+        self._reader = otter.db.ReadConnection(Path(self.project_root))
+
+    @property
+    def reader(self):
+        return self._reader
+
     def connect(self, /):
         return otter.db.WriteSimConnection(Path(self.project_root))
