@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 
-from typing import Dict, Iterable, Tuple
+from typing import Dict, Iterable, Tuple, Callable
 
 import otter.log
 import otter
@@ -103,6 +103,8 @@ class BaseEventModel(ABC):
         add_task_metadata_cbk: TaskMetaCallback,
         add_task_action_cbk: TaskActionCallback,
         add_task_suspend_meta_cbk: TaskSuspendMetaCallback,
+        interval: int,
+        interval_callback: Callable[[int], None],
     ):
         otter.log.debug("receiving events from %s", events_iter)
 
@@ -172,6 +174,9 @@ class BaseEventModel(ABC):
                 )
 
             total_events = k
+
+            if (total_events % interval) == 0:
+                interval_callback(total_events)
 
         return total_events
 

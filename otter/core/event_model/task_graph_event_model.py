@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Optional, Set, Tuple
+from typing import Optional, Set, Tuple, Callable
 
 import otter.log
 
@@ -108,9 +108,7 @@ class TaskGraphEventModel(BaseEventModel):
 
     def _post_yield_event_callback(self, event: Event) -> None:
         """Called once for each event after it has been sent to super().yield_chunks"""
-        if self._return_addresses is not None and hasattr(
-            event, Attr.caller_return_address.value
-        ):
+        if self._return_addresses is not None and hasattr(event, Attr.caller_return_address.value):
             address = event.caller_return_address
             if address not in self._return_addresses:
                 self._return_addresses.add(address)
@@ -122,9 +120,7 @@ class TaskGraphEventModel(BaseEventModel):
             return False
         return True
 
-    def _filter_with_callbacks(
-        self, events_iter: TraceEventIterable
-    ) -> TraceEventIterable:
+    def _filter_with_callbacks(self, events_iter: TraceEventIterable) -> TraceEventIterable:
         for location, location_count, event in events_iter:
             if self._filter_event(event):
                 self._pre_yield_event_callback(event)
@@ -137,10 +133,14 @@ class TaskGraphEventModel(BaseEventModel):
         add_task_metadata_cbk: TaskMetaCallback,
         add_task_action_cbk: TaskActionCallback,
         add_task_suspend_meta_cbk: TaskSuspendMetaCallback,
+        interval: int,
+        interval_callback: Callable[[int], None],
     ):
         return super().apply_callbacks(
             self._filter_with_callbacks(events_iter),
             add_task_metadata_cbk,
             add_task_action_cbk,
             add_task_suspend_meta_cbk,
+            interval,
+            interval_callback,
         )

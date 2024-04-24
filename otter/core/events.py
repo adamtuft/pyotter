@@ -10,9 +10,10 @@ from otf2.events import BufferFlush
 import otter.log
 from ..definitions import Attr
 
+
 class Location:
     # NOTE: Responsible for recording its traversal into & out of parallel regions
-    
+
     def __init__(self, location: OTF2Location):
         self._loc = location
         self.parallel_region_deque = deque()
@@ -23,7 +24,7 @@ class Location:
     @property
     def name(self):
         return self._loc.name
-    
+
     @property
     def ref(self):
         return self._loc._ref
@@ -44,13 +45,11 @@ class Location:
 class Event:
     """A basic wrapper for OTF2 events"""
 
-    def __init__(
-        self, otf2_event: OTF2Event, attribute_lookup: Dict[str, OTF2Attribute]
-    ) -> None:
+    def __init__(self, otf2_event: OTF2Event, attribute_lookup: Dict[str, OTF2Attribute]) -> None:
         self._event = otf2_event
         self._attribute_lookup = attribute_lookup
         if self._event.attributes is None:
-            log.warning(
+            otter.log.warning(
                 "%s event attributes is None: %s",
                 str(type(otf2_event)),
                 str(otf2_event),
