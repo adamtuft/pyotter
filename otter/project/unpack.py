@@ -78,8 +78,20 @@ def process_trace(
 
         otter.log.info("extracting task data...")
         start = time()
+
+        def log_time(count: int):
+            cur = time() - start
+            otter.log.info(
+                f" -- {cur:5.3f}s: {count} events processed ({count/cur:.3g} events/sec)"
+            )
+
         events_count = event_model.apply_callbacks(
-            event_iter, task_meta_callback, task_action_callback, task_suspend_callback
+            event_iter,
+            task_meta_callback,
+            task_action_callback,
+            task_suspend_callback,
+            interval=100000,
+            interval_callback=log_time,
         )
         end = time()
         dt = end - start
