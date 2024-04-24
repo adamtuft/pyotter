@@ -2,11 +2,11 @@ from __future__ import annotations
 
 from functools import lru_cache
 from pathlib import Path
-from typing import Generator, List, Tuple, Sequence
+from typing import Generator, List, Tuple, Sequence, Optional
 
 from .connect_base import Mode, ConnectionBase
 from .scripts import scripts
-from .types import SourceLocation, TaskAttributes, Task, TaskSchedulingState
+from .types import SourceLocation, TaskAttributes, Task, TaskSchedulingState, Event
 
 
 class ReadConnection(ConnectionBase):
@@ -23,7 +23,7 @@ class ReadConnection(ConnectionBase):
     def __exit__(self, ex_type, ex, tb):
         pass
 
-    def count_rows(self) -> List[Tuple[str, str, int]]:
+    def count_rows(self):
 
         self.log_debug("try to read from sqlite_master")
         rows = self._con.execute(scripts["select_names_from_sqlite_master"]).fetchall()
@@ -126,14 +126,31 @@ class ReadConnection(ConnectionBase):
         cur = self._con.execute(scripts["count_tasks_by_attributes"])
         return ((self._make_task_attr(*row[0:4]), row[4]) for row in cur)
 
-    def get_task_scheduling_states(self, tasks: Tuple[int]) -> List[TaskSchedulingState]:
+    def get_task_scheduling_states(
+        self,
+        tasks: Tuple[int],
+        *,
+        sim_id: Optional[int] = None,
+    ) -> List[TaskSchedulingState]:
         """Return 1 row per task scheduling state during the task's lifetime"""
 
-        query = scripts["get_task_scheduling_states"].format(
-            placeholder=",".join("?" for task in tasks)
-        )
+        if sim_id is not None:
+            query = scripts["get_simulated_scheduling_states"].format(
+                sim_id=sim_id,
+                placeholder=",".join("?" for task in tasks),
+            )
+        else:
+            query = scripts["get_task_scheduling_states"].format(
+                placeholder=",".join("?" for task in tasks)
+            )
+
         cur = self._con.execute(query, tasks)
         return [TaskSchedulingState(*row) for row in cur]
+
+    def get_task_history(self, task: int):
+
+        cur = self._con.execute(scripts["get_task_history"], (task,)).fetchall()
+        return list(map(self._make_event, cur))
 
     def get_task_event_positions(self, task: int) -> List[Tuple[int, int]]:
         return list(self._con.execute(scripts["get_task_events"], (task,)))
@@ -154,6 +171,14 @@ class ReadConnection(ConnectionBase):
         cur = self._con.execute(query, (task,))
         return list(cur)
 
+    def get_sim_ids(self) -> List[int]:
+        cur = self._con.execute("select distinct sim_id from sim_task_history;").fetchall()
+        return list(cur)
+
+    def get_critical_tasks(self, /, *, sim_id: int) -> List[int]:
+        cur = self._con.execute(scripts["get_critical_tasks"].format(root_task=0), (sim_id,))
+        return [task for (task,) in cur]
+
     # Row factories
 
     def _make_task(self, row) -> Task:
@@ -167,3 +192,6 @@ class ReadConnection(ConnectionBase):
             self.get_source_location(start),
             self.get_source_location(end),
         )
+
+    def _make_event(self, row):
+        return Event(*row)
