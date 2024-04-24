@@ -1,5 +1,5 @@
 from dataclasses import dataclass, InitVar, field, asdict
-from typing import NamedTuple
+from typing import NamedTuple, Callable, Optional
 
 from otter.definitions import TaskAction
 
@@ -11,6 +11,23 @@ class SourceLocation(NamedTuple):
 
     def __str__(self) -> str:
         return f"{self.file}:{self.line} in {self.func}"
+
+
+@dataclass(frozen=True)
+class Event:
+    id: int
+    event: int
+    _action: InitVar[int]
+    action: TaskAction = field(init=False)
+    file_name: InitVar[str]
+    func_name: InitVar[str]
+    line: InitVar[int]
+    time: int
+    location: SourceLocation = field(init=False)
+
+    def __post_init__(self, action: int, file_name: str, func_name: str, line: int) -> None:
+        super().__setattr__("location", SourceLocation(file_name, func_name, line))
+        super().__setattr__("action", TaskAction(action))
 
 
 @dataclass(frozen=True)
@@ -49,10 +66,22 @@ class TaskSchedulingState:
         )
 
     def __str__(self) -> str:
-        return f"{self.__class__.__name__}(task={self.task}, {TaskAction(self.action_start)}:{self.start_location} at {self.start_ts} -> {TaskAction(self.action_end)}:{self.start_location} at {self.end_ts})"
+        return f"{self.__class__.__name__}(task={self.task}, {TaskAction(self.action_start)}:{self.start_location} at {self.start_ts} -> {TaskAction(self.action_end)}:{self.end_location} at {self.end_ts})"
 
-    def asdict(self):
-        return asdict(self)
+    def asdict(
+        self,
+        *,
+        location: Optional[Callable] = str,
+        action: Optional[Callable] = lambda x: TaskAction(x).name,
+    ):
+        d = asdict(self)
+        if location:
+            d["start_location"] = location(self.start_location)
+            d["end_location"] = location(self.end_location)
+        if action:
+            d["action_start"] = action(self.action_start)
+            d["action_end"] = action(self.action_end)
+        return d
 
 
 @dataclass(frozen=True)
@@ -107,5 +136,13 @@ class Task:
     def is_null(self) -> bool:
         return self.attr.is_null()
 
-    def asdict(self):
-        return asdict(self)
+    def asdict(self, *, flatten: bool = False, location: Optional[Callable] = str):
+        if not flatten:
+            return asdict(self)
+        d = asdict(self)
+        del d["attr"]
+        d["label"] = self.attr.label
+        for locname in ["create_location", "start_location", "end_location"]:
+            loc = getattr(self.attr, locname)
+            d[locname] = location(loc) if location else loc
+        return d
