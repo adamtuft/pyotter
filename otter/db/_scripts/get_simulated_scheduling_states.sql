@@ -1,9 +1,10 @@
--- List the scheduling states of some tasks
+-- List the simulated scheduling states of some tasks
 with events as (
 	select *
 		,row_number() over (order by id, cast(time as int)) as row_number
-	from task_history as hist
-	where hist.id in ({placeholder})
+	from sim_task_history as hist
+	where sim_id = {sim_id}
+        and hist.id in ({placeholder})
 )
 select events_left.id
 	,events_left.action as action_start
@@ -26,5 +27,5 @@ left join source_location as src_left
 left join source_location as src_right
     on events_right.source_location_id = src_right.src_loc_id
 order by events_left.id
-	,start_ts
+	,cast(events_left.time as int)
 ;
