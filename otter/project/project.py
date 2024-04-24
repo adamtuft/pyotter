@@ -14,20 +14,27 @@ class ProjectBase(ABC, Loggable):
 
     def __init__(self, anchorfile: str, /) -> None:
         self.log_debug("using project: %s", self)
-        self.anchorfile = Path(anchorfile).resolve()
-        self.project_root: str = os.path.dirname(self.anchorfile)
-        self.aux_dir = "aux"
-        self.maps_file = self.abspath(os.path.join(self.aux_dir, "maps"))
+        self._anchorfile = Path(anchorfile).expanduser().resolve()
+        aux_dir = self.project_root / "aux"
+        maps_file = aux_dir / "maps"
 
-        if not os.path.isdir(self.abspath(self.aux_dir)):
-            self.log_error("directory not found: %s", self.abspath(self.aux_dir))
-            raise SystemExit(1)
-        if not os.path.isfile(self.maps_file):
-            self.log_error("no such file: %s", self.maps_file)
-            raise SystemExit(1)
+        if not aux_dir.is_dir():
+            self.log_error("directory not found: %s", aux_dir)
+            raise NotADirectoryError(str(aux_dir))
+        if not maps_file.is_file():
+            self.log_error("no such file: %s", maps_file)
+            raise FileNotFoundError(str(maps_file))
 
         self.log_info("project root:  %s", self.project_root)
-        self.log_info("anchorfile:    %s", self.anchorfile)
+        self.log_info("anchorfile:    %s", self._anchorfile)
+
+    @property
+    def anchorfile(self):
+        return self._anchorfile
+
+    @property
+    def project_root(self):
+        return self._anchorfile.parent
 
     def abspath(self, relname: str):
         """Get the absolute path of an internal folder"""
@@ -40,7 +47,7 @@ class ProjectBase(ABC, Loggable):
 class UnpackTraceData(ProjectBase):
 
     def connect(self, /, overwrite: bool):
-        return otter.db.WriteConnection(Path(self.project_root), overwrite=overwrite)
+        return otter.db.WriteConnection(self.project_root, overwrite=overwrite)
 
 
 class ReadTraceData(ProjectBase):
@@ -48,7 +55,7 @@ class ReadTraceData(ProjectBase):
 
     def connect(self, /):
         """Return a connection to this project's tasks db"""
-        return otter.db.ReadConnection(Path(self.project_root))
+        return otter.db.ReadConnection(self.project_root)
 
 
 class SimulateTrace(ProjectBase):
@@ -56,7 +63,7 @@ class SimulateTrace(ProjectBase):
 
     def __init__(self, anchorfile: str) -> None:
         super().__init__(anchorfile)
-        self._reader = otter.db.ReadConnection(Path(self.project_root))
+        self._reader = otter.db.ReadConnection(self.project_root)
 
     @property
     def reader(self):
