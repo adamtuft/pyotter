@@ -28,25 +28,26 @@ class ConnectionBase(ABC, Loggable):
     ) -> None:
         super().__init__()
         dbpath = root_path / "aux" / "tasks.db"
-        if mode is Mode.wo:
-            uri = f"file:{dbpath}?mode={Mode.rwc.name}"
-        else:
-            uri = f"file:{dbpath}?mode={mode.name}"
+        mode_s = Mode.rwc.name if mode is Mode.wo else mode.name
+        self._uri = f"file:{dbpath}?mode={mode_s}"
         if mode is Mode.wo and dbpath.exists():
             if not overwrite:
                 raise FileExistsError(dbpath)
             else:
                 self.log_warning("overwriting tasks database: %s", dbpath)
                 dbpath.unlink()
-        self.log_debug("connect: %s", uri)
+        self.log_debug("connect: %r", self)
         try:
-            self._con = sqlite3.connect(uri, uri=True)
+            self._con = sqlite3.connect(self._uri, uri=True)
         except sqlite3.OperationalError as err:
             self.log_error(str(err))
             if mode in [Mode.ro, Mode.rw] and not dbpath.exists():
                 raise FileNotFoundError(dbpath) from None
             else:
                 raise err
+
+    def __repr__(self) -> str:
+        return f"{type(self).__name__}(uri={self._uri})"
 
     @abstractmethod
     def __enter__(self): ...
