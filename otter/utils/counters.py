@@ -18,6 +18,6 @@ class CountingDict(defaultdict):
         super().__init__(int)
         self._map = defaultdict(lambda: count(start=start, step=step))
 
-    def increment(self, key):
+    def increment(self, key) -> int:
         self[key] = next(self._map[key])
         return self[key]
