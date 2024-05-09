@@ -119,9 +119,16 @@ class EdgeType(str, Enum):
     taskgroup = "taskgroup"
 
 
+#! deprecate this in favour of TaskSyncMode
 class TaskSyncType(int, Enum):
     children = 0
     descendants = 1
+
+
+class TaskSyncMode(int, Enum):
+    children = 0
+    descendants = 1
+    yld = 2
 
 
 class TaskEvent(str, Enum):
