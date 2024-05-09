@@ -87,6 +87,9 @@ class TaskScheduler(Loggable):
         "taskwait-inclusive duration" among the children synchronised by a barrier
         """
 
+        self.log_debug(f"BRANCH: {'+'*depth} {task.id=} {task.children=}")
+
+        children_visited = 0
         execution_native_dt, suspended_ideal_dt = 0, 0
 
         task_states = self.con.get_task_scheduling_states((task.id,))
@@ -95,12 +98,16 @@ class TaskScheduler(Loggable):
         otter.log.debug("got %d task scheduling states", len(task_states))
         barrier_counter = count()
         for state in task_states:
+            self.log_debug(f"BRANCH: {'|'*depth} {task.id=} {TaskAction(state.action_start).name}")
             if state.action_start in (TaskAction.START, TaskAction.RESUME):
                 # task in an active state
                 execution_native_dt = execution_native_dt + state.duration
                 # store the children created during this period
                 children_pending[state.end_ts] = self.con.get_children_created_between(
                     task.id, state.start_ts, state.end_ts
+                )
+                self.log_debug(
+                    f"BRANCH: {'|'*depth} {task.id=} -- children created: {len(children_pending[state.end_ts])}"
                 )
                 global_start_ts = global_start_ts + state.duration
             elif state.action_start == TaskAction.SUSPEND:
@@ -110,28 +117,48 @@ class TaskScheduler(Loggable):
                 )
                 critical_task = None
                 barrier_duration = 0
+                max_child_end_ts = 0
+                latest_child = None
                 sync_descendants = task_suspend_meta[state.start_ts]
                 self.task_suspend_callback(task.id, state.start_ts, sync_descendants)
                 # get the children synchronised at this point
-                children = children_pending.get(state.start_ts, [])
-                child_ids: List[int]
-                child_ids, _ = list(zip(*children))
-                children_attr = self.con.get_tasks(child_ids)
-                for child in children_attr:
-                    child_crt_dt = int(state.start_ts) - int(child.create_ts)
-                    child_duration = self.descend(
-                        child,
-                        depth + 1,
-                        global_start_ts - child_crt_dt,
-                    )
-                    duration_into_barrier = child_duration - (
-                        int(state.start_ts) - int(child.create_ts)
-                    )
-                    if duration_into_barrier > barrier_duration:
-                        barrier_duration = duration_into_barrier
-                        critical_task = child.id
-                if critical_task is not None:
-                    self.crit_task_callback(task.id, next(barrier_counter), critical_task)
+                pending = children_pending.get(state.start_ts, [])
+                self.log_debug(
+                    f"BRANCH: {'|'*depth} {task.id=} -- children pending: {len(pending)}"
+                )
+                if pending:
+                    child_ids: List[int]
+                    child_ids, _ = list(zip(*pending))
+                    children_attr = self.con.get_tasks(child_ids)
+                    for child in children_attr:
+                        child_crt_dt = int(state.start_ts) - int(child.create_ts)
+                        child_duration = self.descend(
+                            child,
+                            depth + 1,
+                            global_start_ts - child_crt_dt,
+                        )
+                        child_end_ts = global_start_ts - child_crt_dt + child_duration
+                        if child_end_ts > max_child_end_ts:
+                            max_child_end_ts = child_end_ts
+                            latest_child = child
+                        duration_into_barrier = child_duration - (
+                            int(state.start_ts) - int(child.create_ts)
+                        )
+                        if duration_into_barrier > barrier_duration:
+                            barrier_duration = duration_into_barrier
+                            critical_task = child.id
+                        else:
+                            self.log_debug(
+                                f"BRANCH: {'|'*depth} {task.id=} -- child {child.id} did not extend barrier ({child_end_ts=}, {child_duration=}, {duration_into_barrier=}, {barrier_duration=})"
+                            )
+                        children_visited += 1
+                    if critical_task is None:
+                        self.log_debug(
+                            f"BRANCH: {'|'*depth} {task.id=} -- no critical child ({task.id=}, {max_child_end_ts=}, {latest_child=})"
+                        )
+                    else:
+                        self.log_debug(f"BRANCH: {'|'*depth} {task.id=} -- {critical_task=}")
+                        self.crit_task_callback(task.id, next(barrier_counter), critical_task)
                 suspended_ideal_dt = suspended_ideal_dt + barrier_duration
                 global_start_ts = global_start_ts + barrier_duration
                 self.task_action_callback(
@@ -142,6 +169,8 @@ class TaskScheduler(Loggable):
                 pass
             else:
                 otter.log.error("UNKNOWN STATE: %s", state)
+
+        assert children_visited == task.children
 
         return execution_native_dt + suspended_ideal_dt
 
