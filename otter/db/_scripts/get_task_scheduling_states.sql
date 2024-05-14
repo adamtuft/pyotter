@@ -16,6 +16,10 @@ select events_left.id
 	,src_right.line as line_end
 	,events_left.time as start_ts
 	,events_right.time as end_ts
+    ,events_left.cpu as cpu_start
+    ,events_right.cpu as cpu_end
+    ,events_left.tid as tid_start
+    ,events_right.tid as tid_end
 	,cast(events_right.time as int) - cast(events_left.time as int) as duration
 from events as events_left
 inner join events as events_right

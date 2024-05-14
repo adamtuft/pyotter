@@ -43,6 +43,10 @@ class TaskSchedulingState:
     line_end: InitVar[int]
     start_ts: str
     end_ts: str
+    cpu_start: int
+    cpu_end: int
+    tid_start: int
+    tid_end: int
     duration: int
     start_location: SourceLocation = field(init=False)
     end_location: SourceLocation = field(init=False)

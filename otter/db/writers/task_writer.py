@@ -49,7 +49,7 @@ class TaskActionWriter(WriterBase):
         self, con: Connection, /, *, source: Dict[SourceLocation, int], bufsize: int = 1000
     ) -> None:
         self._source = source
-        self._task_actions = BufferedDBWriter(con, "task_history", 6, bufsize=bufsize)
+        self._task_actions = BufferedDBWriter(con, "task_history", 8, bufsize=bufsize)
         self._task_suspend_meta = BufferedDBWriter(con, "task_suspend_meta", 3, bufsize=bufsize)
 
     def add_task_action(
@@ -60,8 +60,10 @@ class TaskActionWriter(WriterBase):
         source_location: SourceLocation,
         /,
         *,
-        location_ref: Optional[int],
-        location_count: Optional[int],
+        location_ref: Optional[int] = None,
+        location_count: Optional[int] = None,
+        cpu: int,
+        tid: int,
     ) -> None:
         self._task_actions.insert(
             task,
@@ -70,6 +72,8 @@ class TaskActionWriter(WriterBase):
             self._source[source_location],
             location_ref,
             location_count,
+            cpu,
+            tid,
         )
 
     def add_task_suspend_meta(self, task: int, time: str, sync_descendants: bool) -> None:
@@ -98,7 +102,7 @@ class SimTaskActionWriter(WriterBase):
     ) -> None:
         self._source = source
         self._sim_id = sim_id  # simulation ID
-        self._task_actions = BufferedDBWriter(con, "sim_task_history", 5, bufsize=bufsize)
+        self._task_actions = BufferedDBWriter(con, "sim_task_history", 7, bufsize=bufsize)
         self._task_suspend_meta = BufferedDBWriter(con, "sim_task_suspend_meta", 4, bufsize=bufsize)
 
     def add_task_action(
@@ -111,6 +115,8 @@ class SimTaskActionWriter(WriterBase):
         *,
         location_ref: Optional[int] = None,
         location_count: Optional[int] = None,
+        cpu: int,
+        tid: int,
     ) -> None:
         self._task_actions.insert(
             self._sim_id,
@@ -118,6 +124,8 @@ class SimTaskActionWriter(WriterBase):
             action,
             time,
             self._source[source_location],
+            cpu,
+            tid,
         )
 
     def add_task_suspend_meta(self, task: int, time: str, sync_descendants: bool) -> None:

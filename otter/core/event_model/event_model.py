@@ -130,6 +130,8 @@ class BaseEventModel(ABC):
                     task.create_location,
                     location_ref=location.ref,
                     location_count=location_count,
+                    cpu=event.cpu,
+                    tid=event.tid,
                 )
             if self.is_update_task_start_ts_event(event):
                 add_task_action_cbk(
@@ -139,6 +141,8 @@ class BaseEventModel(ABC):
                     self.get_source_location(event),
                     location_ref=location.ref,
                     location_count=location_count,
+                    cpu=event.cpu,
+                    tid=event.tid,
                 )
             if self.is_task_complete_event(event):
                 add_task_action_cbk(
@@ -148,6 +152,8 @@ class BaseEventModel(ABC):
                     self.get_source_location(event),
                     location_ref=location.ref,
                     location_count=location_count,
+                    cpu=event.cpu,
+                    tid=event.tid,
                 )
             if self.is_task_suspend_event(event):
                 add_task_action_cbk(
@@ -157,6 +163,8 @@ class BaseEventModel(ABC):
                     self.get_source_location(event),
                     location_ref=location.ref,
                     location_count=location_count,
+                    cpu=event.cpu,
+                    tid=event.tid,
                 )
                 add_task_suspend_meta_cbk(
                     event.encountering_task_id,
@@ -171,6 +179,8 @@ class BaseEventModel(ABC):
                     self.get_source_location(event),
                     location_ref=location.ref,
                     location_count=location_count,
+                    cpu=event.cpu,
+                    tid=event.tid,
                 )
 
             total_events = k

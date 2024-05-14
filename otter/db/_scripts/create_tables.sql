@@ -27,6 +27,8 @@ create table task_history(
     source_location_id int not null,     -- source location
     location_ref int not null,           -- location ref of the evt writer
     location_count int not null,         -- position in the evt writer's stream
+    cpu int not null,                    -- cpu of encountering thread
+    tid int not null,                    -- thread ID
     foreign key (id) references task (id)
 );
 
@@ -89,6 +91,8 @@ create table sim_task_history(
     action int not null,   -- 
     time not null,         -- time of action
     source_location_id,    -- source location
+    cpu int not null,      -- cpu of encountering thread
+    tid int not null,      -- thread ID
     foreign key (id) references task (id)
 );
 

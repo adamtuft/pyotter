@@ -27,6 +27,8 @@ class TaskActionCallback(Protocol):
         *,
         location_ref: Optional[int] = None,
         location_count: Optional[int] = None,
+        cpu: int,
+        tid: int,
     ) -> None: ...
 
 
