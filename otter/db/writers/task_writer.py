@@ -50,7 +50,7 @@ class TaskActionWriter(WriterBase):
     ) -> None:
         self._source = source
         self._task_actions = BufferedDBWriter(con, "task_history", 8, bufsize=bufsize)
-        self._task_suspend_meta = BufferedDBWriter(con, "task_suspend_meta", 3, bufsize=bufsize)
+        self._task_suspend_meta = BufferedDBWriter(con, "task_suspend_meta", 4, bufsize=bufsize)
 
     def add_task_action(
         self,
@@ -76,11 +76,14 @@ class TaskActionWriter(WriterBase):
             tid,
         )
 
-    def add_task_suspend_meta(self, task: int, time: str, sync_descendants: bool) -> None:
+    def add_task_suspend_meta(
+        self, task: int, time: str, sync_descendants: bool, sync_mode: int
+    ) -> None:
         self._task_suspend_meta.insert(
             task,
             time,
             int(sync_descendants),
+            sync_mode,
         )
 
     def close(self):
@@ -103,7 +106,7 @@ class SimTaskActionWriter(WriterBase):
         self._source = source
         self._sim_id = sim_id  # simulation ID
         self._task_actions = BufferedDBWriter(con, "sim_task_history", 7, bufsize=bufsize)
-        self._task_suspend_meta = BufferedDBWriter(con, "sim_task_suspend_meta", 4, bufsize=bufsize)
+        self._task_suspend_meta = BufferedDBWriter(con, "sim_task_suspend_meta", 5, bufsize=bufsize)
 
     def add_task_action(
         self,
@@ -128,12 +131,15 @@ class SimTaskActionWriter(WriterBase):
             tid,
         )
 
-    def add_task_suspend_meta(self, task: int, time: str, sync_descendants: bool) -> None:
+    def add_task_suspend_meta(
+        self, task: int, time: str, sync_descendants: bool, sync_mode: int
+    ) -> None:
         self._task_suspend_meta.insert(
             self._sim_id,
             task,
             time,
             int(sync_descendants),
+            sync_mode,
         )
 
     def close(self):

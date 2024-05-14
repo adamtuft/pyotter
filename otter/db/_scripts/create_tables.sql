@@ -34,9 +34,10 @@ create table task_history(
 
 -- List metadata about each task-suspend action
 create table task_suspend_meta(
-    id int not null,       -- task ID
-    time not null,         -- time of action
-    sync_descendants int not null,
+    id int not null,                 -- task ID
+    time not null,                   -- time of action
+    sync_descendants int not null,   --! deprecated
+    sync_mode int not null,          -- children/descendants/yield?
     primary key (id, time)
     foreign key (id) references task (id)
 );
@@ -99,9 +100,10 @@ create table sim_task_history(
 -- List metadata about each task-suspend action in a simulated schedule
 create table sim_task_suspend_meta(
     sim_id int not null,   -- partition the separate simulations
-    id int not null,       -- task ID
-    time not null,         -- time of action
-    sync_descendants int not null,
+    id int not null,                 -- task ID
+    time not null,                   -- time of action
+    sync_descendants int not null,   --! deprecated
+    sync_mode int not null,          -- children/descendants/yield?
     primary key (sim_id, id, time)
     foreign key (id) references task (id)
 );

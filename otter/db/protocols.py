@@ -35,7 +35,7 @@ class TaskActionCallback(Protocol):
 class TaskSuspendMetaCallback(Protocol):
     """Callback used to dispatch metadata about task-suspend actions"""
 
-    def __call__(self, task: int, time: str, sync_descendants: bool) -> None: ...
+    def __call__(self, task: int, time: str, sync_descendants: bool, sync_mode: int) -> None: ...
 
 
 class CriticalTaskCallback(Protocol):

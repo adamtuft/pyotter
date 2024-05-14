@@ -126,9 +126,9 @@ class TaskSyncType(int, Enum):
 
 
 class TaskSyncMode(int, Enum):
-    children = 0
-    descendants = 1
-    yld = 2
+    CHILDREN = 0
+    DESCENDANTS = 1
+    YIELD = 2
 
 
 class TaskEvent(str, Enum):

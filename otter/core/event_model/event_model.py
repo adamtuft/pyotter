@@ -170,6 +170,7 @@ class BaseEventModel(ABC):
                     event.encountering_task_id,
                     str(event.time),
                     bool(event.sync_descendant_tasks == TaskSyncType.descendants),
+                    event.sync_mode,
                 )
             elif self.is_task_resume_event(event):
                 add_task_action_cbk(
