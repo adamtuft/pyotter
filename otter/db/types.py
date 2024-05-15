@@ -33,8 +33,8 @@ class Event:
 @dataclass(frozen=True)
 class TaskSchedulingState:
     task: int
-    action_start: int
-    action_end: int
+    action_start_int: InitVar[int]
+    action_end_int: InitVar[int]
     file_name_start: InitVar[str]
     func_name_start: InitVar[str]
     line_start: InitVar[int]
@@ -50,9 +50,17 @@ class TaskSchedulingState:
     duration: int
     start_location: SourceLocation = field(init=False)
     end_location: SourceLocation = field(init=False)
+    action_start: TaskAction = field(init=False)
+    action_end: TaskAction = field(init=False)
+
+    @property
+    def is_active(self):
+        return self.action_start in (TaskAction.START, TaskAction.RESUME)
 
     def __post_init__(
         self,
+        action_start_int: int,
+        action_end_int: int,
         file_name_start: str,
         func_name_start: str,
         line_start: int,
@@ -68,6 +76,8 @@ class TaskSchedulingState:
             "end_location",
             SourceLocation(file_name_end, func_name_end, line_end),
         )
+        super().__setattr__("action_start", TaskAction(action_start_int))
+        super().__setattr__("action_end", TaskAction(action_end_int))
 
     def __str__(self) -> str:
         return f"{self.__class__.__name__}(task={self.task}, {TaskAction(self.action_start)}:{self.start_location} at {self.start_ts} -> {TaskAction(self.action_end)}:{self.end_location} at {self.end_ts})"

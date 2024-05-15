@@ -4,6 +4,8 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Generator, List, Tuple, Sequence, Optional
 
+from otter.definitions import TaskSyncMode
+
 from .connect_base import Mode, ConnectionBase
 from .scripts import scripts
 from .types import SourceLocation, TaskAttributes, Task, TaskSchedulingState, Event
@@ -128,7 +130,7 @@ class ReadConnection(ConnectionBase):
 
     def get_task_scheduling_states(
         self,
-        tasks: Tuple[int],
+        tasks: Tuple[int, ...],
         *,
         sim_id: Optional[int] = None,
     ) -> List[TaskSchedulingState]:
@@ -155,12 +157,12 @@ class ReadConnection(ConnectionBase):
     def get_task_event_positions(self, task: int) -> List[Tuple[int, int]]:
         return list(self._con.execute(scripts["get_task_events"], (task,)))
 
-    def get_task_suspend_meta(self, task: int) -> Tuple[Tuple[str, bool], ...]:
+    def get_task_suspend_meta(self, task: int) -> Tuple[Tuple[str, TaskSyncMode], ...]:
         """Return the metadata for each suspend event encountered by a task"""
 
-        query = "select time, sync_descendants from task_suspend_meta where id in (?)"
+        query = "select time, sync_mode from task_suspend_meta where id in (?)"
         cur = self._con.execute(query, (task,))
-        return tuple((time, bool(sync_descendants)) for (time, sync_descendants) in cur)
+        return tuple((time, TaskSyncMode(sync_mode)) for (time, sync_mode) in cur)
 
     def get_children_created_between(
         self, task: int, start_ts: str, end_ts: str

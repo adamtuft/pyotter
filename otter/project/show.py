@@ -18,6 +18,16 @@ from otter.utils import CountingDict
 from .project import ReadTraceData
 
 
+def make_barrier_vertex(graph, /, *, attr):
+    return graph.add_vertex(
+        shape="octagon",
+        style="filled",
+        color="red",
+        type="barrier",
+        attr=attr,
+    )
+
+
 def build_control_flow_graph(
     con: otter.db.ReadConnection, task: int, debug: bool, simple: bool = False
 ) -> ig.Graph:
@@ -109,13 +119,10 @@ def build_control_flow_graph(
         elif actions == (TaskAction.START, TaskAction.SUSPEND):
             debug_msg("task interrupted at barrier")
 
-            barrier_vertex = graph.add_vertex(
-                shape="octagon",
-                style="filled",
-                color="red",
-                type="barrier",
+            barrier_vertex = make_barrier_vertex(
+                graph,
                 attr={
-                    "sync descendants": str(task_suspend_meta[state.end_ts]),
+                    "sync mode": task_suspend_meta[state.end_ts].name,
                     "started": f"{state.end_location}",
                     "ended": "?:?",
                 },
@@ -147,13 +154,10 @@ def build_control_flow_graph(
 
             cur["attr"]["ended"] = f"{state.start_location}"
 
-            barrier_vertex = graph.add_vertex(
-                shape="octagon",
-                style="filled",
-                color="red",
-                type="barrier",
+            barrier_vertex = make_barrier_vertex(
+                graph,
                 attr={
-                    "sync descendants": str(task_suspend_meta[state.end_ts]),
+                    "sync mode": task_suspend_meta[state.end_ts].name,
                     "started": f"{state.end_location}",
                     "ended": "?:?",
                 },
