@@ -126,7 +126,7 @@ class BaseEventModel(ABC):
                 add_task_action_cbk(
                     task.id,
                     TaskAction.CREATE,
-                    str(event.time),
+                    event.time,
                     task.create_location,
                     location_ref=location.ref,
                     location_count=location_count,
@@ -137,7 +137,7 @@ class BaseEventModel(ABC):
                 add_task_action_cbk(
                     self.get_task_entered(event),
                     TaskAction.START,
-                    str(event.time),
+                    event.time,
                     self.get_source_location(event),
                     location_ref=location.ref,
                     location_count=location_count,
@@ -148,7 +148,7 @@ class BaseEventModel(ABC):
                 add_task_action_cbk(
                     self.get_task_completed(event),
                     TaskAction.END,
-                    str(event.time),
+                    event.time,
                     self.get_source_location(event),
                     location_ref=location.ref,
                     location_count=location_count,
@@ -159,7 +159,7 @@ class BaseEventModel(ABC):
                 add_task_action_cbk(
                     event.encountering_task_id,
                     TaskAction.SUSPEND,
-                    str(event.time),
+                    event.time,
                     self.get_source_location(event),
                     location_ref=location.ref,
                     location_count=location_count,
@@ -168,7 +168,7 @@ class BaseEventModel(ABC):
                 )
                 add_task_suspend_meta_cbk(
                     event.encountering_task_id,
-                    str(event.time),
+                    event.time,
                     bool(event.sync_descendant_tasks == TaskSyncType.descendants),
                     event.sync_mode,
                 )
@@ -176,7 +176,7 @@ class BaseEventModel(ABC):
                 add_task_action_cbk(
                     event.encountering_task_id,
                     TaskAction.RESUME,
-                    str(event.time),
+                    event.time,
                     self.get_source_location(event),
                     location_ref=location.ref,
                     location_count=location_count,
