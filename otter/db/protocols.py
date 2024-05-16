@@ -2,7 +2,7 @@ from typing import Protocol, Optional, Tuple, Iterable
 
 from otf2_ext.events import EventType
 
-from otter.definitions import TaskAction
+from otter.definitions import TaskAction, TaskID
 from otter.core.events import Event
 
 from .types import SourceLocation
@@ -11,7 +11,7 @@ from .types import SourceLocation
 class TaskMetaCallback(Protocol):
     """Callback used to dispatch task metadata"""
 
-    def __call__(self, task: int, parent: Optional[int], label: str) -> None: ...
+    def __call__(self, task: TaskID, parent: Optional[TaskID], label: str) -> None: ...
 
 
 class TaskActionCallback(Protocol):
@@ -19,7 +19,7 @@ class TaskActionCallback(Protocol):
 
     def __call__(
         self,
-        task: int,
+        task: TaskID,
         action: TaskAction,
         time: int,
         source_location: SourceLocation,
@@ -35,19 +35,19 @@ class TaskActionCallback(Protocol):
 class TaskSuspendMetaCallback(Protocol):
     """Callback used to dispatch metadata about task-suspend actions"""
 
-    def __call__(self, task: int, time: int, sync_descendants: bool, sync_mode: int) -> None: ...
+    def __call__(self, task: TaskID, time: int, sync_descendants: bool, sync_mode: int) -> None: ...
 
 
 class CriticalTaskCallback(Protocol):
     """Callback used to notify that a given child is the critical task during part of a parent's execution"""
 
-    def __call__(self, task: int, sequence: int, critical_child: int, /, *args) -> None: ...
+    def __call__(self, task: TaskID, sequence: int, critical_child: TaskID, /, *args) -> None: ...
 
 
 class EventReaderProtocol(Protocol):
     """Responsible for reading or re-constructing the events of a task"""
 
-    def __call__(self, task: int, /) -> list[Event]: ...
+    def __call__(self, task: TaskID, /) -> list[Event]: ...
 
 
 class SeekEventsCallback(Protocol):
