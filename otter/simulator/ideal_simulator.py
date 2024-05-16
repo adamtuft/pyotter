@@ -8,7 +8,7 @@ from otter.log import Loggable
 from otter.db import ReadConnection
 from otter.db.protocols import TaskActionCallback, TaskSuspendMetaCallback, CriticalTaskCallback
 from otter.db.types import Task
-from otter.definitions import TaskAction
+from otter.definitions import TaskAction, TaskID
 
 
 class TaskScheduler(Loggable):
@@ -19,7 +19,7 @@ class TaskScheduler(Loggable):
         crit_task_callback: CriticalTaskCallback,
         task_action_callback: TaskActionCallback,
         task_suspend_callback: TaskSuspendMetaCallback,
-        initial_tasks: Optional[Sequence[int]] = None,
+        initial_tasks: Optional[Sequence[TaskID]] = None,
     ) -> None:
         self.log_debug("CALLBACKS:")
         self.log_debug("CALLBACKS: %s", crit_task_callback)
@@ -54,14 +54,19 @@ class TaskScheduler(Loggable):
     def descend(self, task: Task, depth: int, global_start_ts: int):
         """Descend into the children of task. At the root, handle leaf tasks"""
         self.task_action_callback(
-            task.id, TaskAction.START, str(global_start_ts), task.attr.start_location
+            task.id, TaskAction.START, global_start_ts, task.attr.start_location, cpu=0, tid=0
         )
         if task.children > 0:
             duration = self.branch_task(task, depth, global_start_ts)
         else:
             duration = self.leaf_task(task, depth, global_start_ts)
         self.task_action_callback(
-            task.id, TaskAction.END, str(global_start_ts + duration), task.attr.end_location
+            task.id,
+            TaskAction.END,
+            global_start_ts + duration,
+            task.attr.end_location,
+            cpu=0,
+            tid=0,
         )
         return duration
 
@@ -94,7 +99,7 @@ class TaskScheduler(Loggable):
 
         task_states = self.con.get_task_scheduling_states((task.id,))
         task_suspend_meta = dict(self.con.get_task_suspend_meta(task.id))
-        children_pending: Dict[str, List[Tuple[int, str]]] = {}
+        children_pending: Dict[int, List[Tuple[TaskID, int]]] = {}
         otter.log.debug("got %d task scheduling states", len(task_states))
         barrier_counter = count()
         for state in task_states:
@@ -113,21 +118,22 @@ class TaskScheduler(Loggable):
             elif state.action_start == TaskAction.SUSPEND:
                 # task is suspended
                 self.task_action_callback(
-                    task.id, TaskAction.SUSPEND, str(global_start_ts), state.start_location
+                    task.id, TaskAction.SUSPEND, global_start_ts, state.start_location, cpu=0, tid=0
                 )
                 critical_task = None
                 barrier_duration = 0
                 max_child_end_ts = 0
                 latest_child = None
-                sync_descendants = task_suspend_meta[state.start_ts]
-                self.task_suspend_callback(task.id, state.start_ts, sync_descendants)
+                self.task_suspend_callback(
+                    task.id, state.start_ts, False, task_suspend_meta[state.start_ts]
+                )
                 # get the children synchronised at this point
                 pending = children_pending.get(state.start_ts, [])
                 self.log_debug(
                     f"BRANCH: {'|'*depth} {task.id=} -- children pending: {len(pending)}"
                 )
                 if pending:
-                    child_ids: List[int]
+                    child_ids: List[TaskID]
                     child_ids, _ = list(zip(*pending))
                     children_attr = self.con.get_tasks(child_ids)
                     for child in children_attr:
@@ -162,7 +168,7 @@ class TaskScheduler(Loggable):
                 suspended_ideal_dt = suspended_ideal_dt + barrier_duration
                 global_start_ts = global_start_ts + barrier_duration
                 self.task_action_callback(
-                    task.id, TaskAction.RESUME, str(global_start_ts), state.end_location
+                    task.id, TaskAction.RESUME, global_start_ts, state.end_location, cpu=0, tid=0
                 )
             elif state.action_start == TaskAction.CREATE:
                 # task is created and not yet started
