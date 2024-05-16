@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from enum import Enum
+from typing import NewType
 
 
 class Attr(str, Enum):
@@ -147,3 +148,5 @@ class EventModel(str, Enum):
 
 
 NullTaskID = 18446744073709551615
+
+TaskID = NewType("TaskID", int)
