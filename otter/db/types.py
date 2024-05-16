@@ -1,7 +1,7 @@
 from dataclasses import dataclass, InitVar, field, asdict
 from typing import NamedTuple, Callable, Optional
 
-from otter.definitions import TaskAction
+from otter.definitions import TaskAction, TaskID
 
 
 class SourceLocation(NamedTuple):
@@ -32,7 +32,7 @@ class Event:
 
 @dataclass(frozen=True)
 class TaskSchedulingState:
-    task: int
+    task: TaskID
     action_start_int: InitVar[int]
     action_end_int: InitVar[int]
     file_name_start: InitVar[str]
@@ -41,8 +41,8 @@ class TaskSchedulingState:
     file_name_end: InitVar[str]
     func_name_end: InitVar[str]
     line_end: InitVar[int]
-    start_ts: str
-    end_ts: str
+    start_ts: int
+    end_ts: int
     cpu_start: int
     cpu_end: int
     tid_start: int
@@ -80,7 +80,7 @@ class TaskSchedulingState:
         super().__setattr__("action_end", TaskAction(action_end_int))
 
     def __str__(self) -> str:
-        return f"{self.__class__.__name__}(task={self.task}, {TaskAction(self.action_start)}:{self.start_location} at {self.start_ts} -> {TaskAction(self.action_end)}:{self.end_location} at {self.end_ts})"
+        return f"{self.__class__.__name__}(task={self.task}, {self.action_start}:{self.start_location} at {self.start_ts} -> {self.action_end}:{self.end_location} at {self.end_ts})"
 
     def asdict(
         self,
@@ -118,12 +118,12 @@ class TaskAttributes:  # For use in Connection.parent_child_attributes
 class Task:
     # Represents a row in the task table
 
-    id: int
-    parent: int
+    id: TaskID
+    parent: TaskID
     children: int
-    create_ts: str
-    start_ts: str
-    end_ts: str
+    create_ts: int
+    start_ts: int
+    end_ts: int
     label: InitVar[str]
     create_location: InitVar[SourceLocation]
     start_location: InitVar[SourceLocation]

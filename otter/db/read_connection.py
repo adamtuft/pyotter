@@ -4,7 +4,7 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Generator, List, Tuple, Sequence, Optional
 
-from otter.definitions import TaskSyncMode
+from otter.definitions import TaskSyncMode, TaskID
 
 from .connect_base import Mode, ConnectionBase
 from .scripts import scripts
@@ -13,8 +13,6 @@ from .types import SourceLocation, TaskAttributes, Task, TaskSchedulingState, Ev
 
 class ReadConnection(ConnectionBase):
     """Implements all logic for querying an otter database"""
-
-    #! TODO: add queries for listing simulations, getting sim task history, getting event positions
 
     def __init__(self, root_path: Path) -> None:
         super().__init__(root_path, mode=Mode.ro)
@@ -55,24 +53,24 @@ class ReadConnection(ConnectionBase):
         cur = self._con.execute(scripts["count_simulation_rows"]).fetchall()
         return list(cur)
 
-    def get_root_tasks(self) -> Tuple[int]:
-        return (0,)
+    def get_root_tasks(self) -> Tuple[TaskID, ...]:
+        return (TaskID(0),)
 
-    def get_num_children(self, task: int) -> int:
+    def get_num_children(self, task: TaskID) -> int:
         query = "select count(*) from task_relation where parent_id in (?)"
         (count,) = self._con.execute(query, (task,)).fetchone()
         return count
 
-    def get_children_of(self, parent: int) -> List[int]:
+    def get_children_of(self, parent: TaskID) -> List[TaskID]:
         query = "select child_id from task_relation where parent_id in (?)"
         cur = self._con.execute(query, (parent,))
         return [task for (task,) in cur]
 
-    def get_ancestors_of(self, task: int) -> List[int]:
+    def get_ancestors_of(self, task: TaskID) -> List[TaskID]:
         cur = self._con.execute(scripts["get_ancestors"], (task,))
         return [task for (task,) in cur]
 
-    def get_descendants_of(self, task: int) -> List[int]:
+    def get_descendants_of(self, task: TaskID) -> List[TaskID]:
         cur = self._con.execute(scripts["get_descendants"], (task,))
         return [task for (task,) in cur]
 
@@ -88,10 +86,11 @@ class ReadConnection(ConnectionBase):
         ]
         return results
 
-    def get_tasks(self, tasks: Sequence[int]) -> List[Task]:
+    def get_tasks(self, tasks: Sequence[TaskID]) -> List[Task]:
         placeholder = ",".join("?" for _ in tasks)
         query = scripts["get_task_attributes"].format(placeholder=placeholder)
-        return list(map(self._make_task, self._con.execute(query, tuple(tasks))))
+        cur = self._con.execute(query, tuple(tasks))
+        return list(map(self._make_task, cur))
 
     def iter_all_tasks(self):
         """An iterator over all tasks in the db"""
@@ -130,7 +129,7 @@ class ReadConnection(ConnectionBase):
 
     def get_task_scheduling_states(
         self,
-        tasks: Tuple[int, ...],
+        tasks: Tuple[TaskID, ...],
         *,
         sim_id: Optional[int] = None,
     ) -> List[TaskSchedulingState]:
@@ -149,15 +148,15 @@ class ReadConnection(ConnectionBase):
         cur = self._con.execute(query, tasks)
         return [TaskSchedulingState(*row) for row in cur]
 
-    def get_task_history(self, task: int):
+    def get_task_history(self, task: TaskID):
 
         cur = self._con.execute(scripts["get_task_history"], (task,)).fetchall()
         return list(map(self._make_event, cur))
 
-    def get_task_event_positions(self, task: int) -> List[Tuple[int, int]]:
+    def get_task_event_positions(self, task: TaskID) -> List[Tuple[int, int]]:
         return list(self._con.execute(scripts["get_task_events"], (task,)))
 
-    def get_task_suspend_meta(self, task: int) -> Tuple[Tuple[str, TaskSyncMode], ...]:
+    def get_task_suspend_meta(self, task: TaskID) -> Tuple[Tuple[int, TaskSyncMode], ...]:
         """Return the metadata for each suspend event encountered by a task"""
 
         query = "select time, sync_mode from task_suspend_meta where id in (?)"
@@ -165,8 +164,8 @@ class ReadConnection(ConnectionBase):
         return tuple((time, TaskSyncMode(sync_mode)) for (time, sync_mode) in cur)
 
     def get_children_created_between(
-        self, task: int, start_ts: str, end_ts: str
-    ) -> List[Tuple[int, str]]:
+        self, task: TaskID, start_ts: int, end_ts: int
+    ) -> List[Tuple[TaskID, int]]:
         """Return the children created between the given start & end times"""
 
         query = scripts["get_children_created_between"].format(start_ts=start_ts, end_ts=end_ts)
@@ -177,7 +176,7 @@ class ReadConnection(ConnectionBase):
         cur = self._con.execute("select distinct sim_id from sim_task_history;").fetchall()
         return list(cur)
 
-    def get_critical_tasks(self, /, *, sim_id: int) -> List[int]:
+    def get_critical_tasks(self, /, *, sim_id: int) -> List[TaskID]:
         cur = self._con.execute(scripts["get_critical_tasks"].format(root_task=0), (sim_id,))
         return [task for (task,) in cur]
 

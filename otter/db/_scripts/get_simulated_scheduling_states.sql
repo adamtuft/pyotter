@@ -1,7 +1,7 @@
 -- List the simulated scheduling states of some tasks
 with events as (
 	select *
-		,row_number() over (order by id, cast(time as int)) as row_number
+		,row_number() over (order by id, time) as row_number
 	from sim_task_history as hist
 	where sim_id = {sim_id}
         and hist.id in ({placeholder})
@@ -17,7 +17,11 @@ select events_left.id
 	,src_right.line as line_end
 	,events_left.time as start_ts
 	,events_right.time as end_ts
-	,cast(events_right.time as int) - cast(events_left.time as int) as duration
+    ,events_left.cpu as cpu_start
+    ,events_right.cpu as cpu_end
+    ,events_left.tid as tid_start
+    ,events_right.tid as tid_end
+	,events_right.time - events_left.time as duration
 from events as events_left
 inner join events as events_right
 	on events_left.id = events_right.id
@@ -27,5 +31,5 @@ left join source_location as src_left
 left join source_location as src_right
     on events_right.source_location_id = src_right.src_loc_id
 order by events_left.id
-	,cast(events_left.time as int)
+	,events_left.time
 ;

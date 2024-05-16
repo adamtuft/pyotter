@@ -56,7 +56,7 @@ class TaskActionWriter(WriterBase):
         self,
         task: int,
         action: TaskAction,
-        time: str,
+        time: int,
         source_location: SourceLocation,
         /,
         *,
@@ -77,7 +77,7 @@ class TaskActionWriter(WriterBase):
         )
 
     def add_task_suspend_meta(
-        self, task: int, time: str, sync_descendants: bool, sync_mode: int
+        self, task: int, time: int, sync_descendants: bool, sync_mode: int
     ) -> None:
         self._task_suspend_meta.insert(
             task,
@@ -112,7 +112,7 @@ class SimTaskActionWriter(WriterBase):
         self,
         task: int,
         action: TaskAction,
-        time: str,
+        time: int,
         source_location: SourceLocation,
         /,
         *,
@@ -132,7 +132,7 @@ class SimTaskActionWriter(WriterBase):
         )
 
     def add_task_suspend_meta(
-        self, task: int, time: str, sync_descendants: bool, sync_mode: int
+        self, task: int, time: int, sync_descendants: bool, sync_mode: int
     ) -> None:
         self._task_suspend_meta.insert(
             self._sim_id,
