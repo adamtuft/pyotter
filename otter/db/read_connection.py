@@ -53,8 +53,8 @@ class ReadConnection(ConnectionBase):
         cur = self._con.execute(scripts["count_simulation_rows"]).fetchall()
         return list(cur)
 
-    def get_root_tasks(self) -> Tuple[TaskID, ...]:
-        return (TaskID(0),)
+    def get_root_task(self):
+        return TaskID(0)
 
     def get_num_children(self, task: TaskID) -> int:
         query = "select count(*) from task_relation where parent_id in (?)"
@@ -92,9 +92,22 @@ class ReadConnection(ConnectionBase):
         cur = self._con.execute(query, tuple(tasks))
         return list(map(self._make_task, cur))
 
+    def get_task(self, task: TaskID):
+        return self.get_tasks((task,))[0]
+
     def iter_all_tasks(self):
         """An iterator over all tasks in the db"""
         return map(self._make_task, self._con.execute(scripts["get_all_task_attributes"]))
+
+    def iter_all_task_ids(self) -> Generator[TaskID, None, None]:
+        query = "select id from task order by id"
+        cur = self._con.execute(query)
+        return (n for (n,) in cur)
+
+    def get_thread_ids(self) -> List[int]:
+        query = "select distinct tid from task_history order by tid"
+        cur = self._con.execute(query)
+        return list(n for (n,) in cur)
 
     @lru_cache(maxsize=1000)
     def get_string(self, string_id: int) -> str:
@@ -129,7 +142,7 @@ class ReadConnection(ConnectionBase):
 
     def get_task_scheduling_states(
         self,
-        tasks: Tuple[TaskID, ...],
+        tasks: Sequence[TaskID],
         *,
         sim_id: Optional[int] = None,
     ) -> List[TaskSchedulingState]:
@@ -156,12 +169,12 @@ class ReadConnection(ConnectionBase):
     def get_task_event_positions(self, task: TaskID) -> List[Tuple[int, int]]:
         return list(self._con.execute(scripts["get_task_events"], (task,)))
 
-    def get_task_suspend_meta(self, task: TaskID) -> Tuple[Tuple[int, TaskSyncMode], ...]:
+    def get_task_suspend_meta(self, task: TaskID) -> List[Tuple[int, TaskSyncMode]]:
         """Return the metadata for each suspend event encountered by a task"""
 
         query = "select time, sync_mode from task_suspend_meta where id in (?)"
         cur = self._con.execute(query, (task,))
-        return tuple((time, TaskSyncMode(sync_mode)) for (time, sync_mode) in cur)
+        return list((time, TaskSyncMode(sync_mode)) for (time, sync_mode) in cur)
 
     def get_children_created_between(
         self, task: TaskID, start_ts: int, end_ts: int
