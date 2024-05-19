@@ -14,6 +14,7 @@ class Action(str, Enum):
     SUMMARY = "summary"
     FILTER = "filter"
     SIMULATE = "simulate"
+    PLOT = "plot"
 
 
 class Summarise(str, Enum):
@@ -40,6 +41,7 @@ description_action = {
     Action.SUMMARY: "Print some summary information about the tasks database.",
     Action.FILTER: "Define a filter file based on the tasks recorded in a trace.",
     Action.SIMULATE: "Simulate scheduling the tasks recorded in a trace.",
+    Action.PLOT: "Plot a timeline of the task scheduling data",
 }
 
 extra_description_action = {
@@ -170,6 +172,7 @@ def prepare_parser_unpack(parent: argparse._SubParsersAction[argparse.ArgumentPa
         description=description_action[Action.UNPACK],
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
     )
+    add_common_arguments(parse_action_unpack)
     parse_action_unpack.add_argument(
         "-f",
         "--force",
@@ -186,6 +189,7 @@ def prepare_parser_summary(parent: argparse._SubParsersAction[argparse.ArgumentP
         description=description_action[Action.SUMMARY],
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
     )
+    add_common_arguments(parse_action_summary)
     summary_choices = [opt.name.lower() for opt in Summarise]
     parse_action_summary.add_argument(
         "summarise",
@@ -214,6 +218,7 @@ def prepare_parser_show(parent: argparse._SubParsersAction[argparse.ArgumentPars
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
     )
     parser_show_cfg.add_argument("task", help="task ID", type=int)
+    add_common_arguments(parser_show_cfg)
     parser_show_cfg.add_argument(
         "-o",
         "--out",
@@ -237,6 +242,7 @@ def prepare_parser_show(parent: argparse._SubParsersAction[argparse.ArgumentPars
         description=description_show[GraphType.HIER],
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
     )
+    add_common_arguments(parser_show_hier)
     parser_show_hier.add_argument(
         "-o",
         "--out",
@@ -253,6 +259,7 @@ def prepare_parser_show(parent: argparse._SubParsersAction[argparse.ArgumentPars
         description=description_show[GraphType.TREE],
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
     )
+    add_common_arguments(parser_show_tree)
     parser_show_tree.add_argument(
         "-o",
         "--out",
@@ -278,6 +285,7 @@ def prepare_parser_filter(parent: argparse._SubParsersAction[argparse.ArgumentPa
         description=description_action[Action.FILTER] + extra_description_action[Action.FILTER],
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
+    add_common_arguments(parse_action_filter)
     filter_group = parse_action_filter.add_mutually_exclusive_group(required=True)
     filter_group.add_argument(
         "-e",
@@ -308,6 +316,25 @@ def prepare_parser_simulate(
         description=description_action[Action.SIMULATE],
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
+    add_common_arguments(parse_action_simulate)
+
+
+def prepare_parser_plot(
+    parent: argparse._SubParsersAction[argparse.ArgumentParser],
+):
+    parse_action_plot = parent.add_parser(
+        Action.PLOT.value,
+        help=description_action[Action.PLOT],
+        description=description_action[Action.PLOT],
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    parse_action_plot.add_argument(
+        "-t",
+        "--title",
+        help="plot title",
+        default=None,
+    )
+    add_common_arguments(parse_action_plot)
 
 
 def prepare_parser():
@@ -318,16 +345,17 @@ def prepare_parser():
     )
 
     add_anchorfile_argument(parser)
+    add_common_arguments(parser)
 
     # subparsers for each action (unpack, show, ...)
     subparse_action = parser.add_subparsers(dest="action", metavar="action", required=False)
-    add_common_arguments(parser)
 
     prepare_parser_unpack(subparse_action)
     prepare_parser_summary(subparse_action)
     prepare_parser_show(subparse_action)
     prepare_parser_filter(subparse_action)
     prepare_parser_simulate(subparse_action)
+    prepare_parser_plot(subparse_action)
 
     return parser
 
