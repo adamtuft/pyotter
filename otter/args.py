@@ -177,7 +177,6 @@ def prepare_parser_unpack(parent: argparse._SubParsersAction[argparse.ArgumentPa
         action="store_true",
         default=False,
     )
-    add_common_arguments(parse_action_unpack)
 
 
 def prepare_parser_summary(parent: argparse._SubParsersAction[argparse.ArgumentParser]):
@@ -194,7 +193,6 @@ def prepare_parser_summary(parent: argparse._SubParsersAction[argparse.ArgumentP
         type=Summarise,
         help=f"what entity to summarise (choices: {', '.join(summary_choices)})",
     )
-    add_common_arguments(parse_action_summary)
 
 
 def prepare_parser_show(parent: argparse._SubParsersAction[argparse.ArgumentParser]):
@@ -231,7 +229,6 @@ def prepare_parser_show(parent: argparse._SubParsersAction[argparse.ArgumentPars
         action="store_true",
         default=False,
     )
-    add_common_arguments(parser_show_cfg)
 
     # parse the action "show hier"
     parser_show_hier = subparse_action_show.add_parser(
@@ -248,7 +245,6 @@ def prepare_parser_show(parent: argparse._SubParsersAction[argparse.ArgumentPars
         help="where to save the graph",
         default="hier.dot",
     )
-    add_common_arguments(parser_show_hier)
 
     # parse the action "show tree"
     parser_show_tree = subparse_action_show.add_parser(
@@ -273,7 +269,6 @@ def prepare_parser_show(parent: argparse._SubParsersAction[argparse.ArgumentPars
         choices=["TB", "LR"],
         required=True,
     )
-    add_common_arguments(parser_show_tree)
 
 
 def prepare_parser_filter(parent: argparse._SubParsersAction[argparse.ArgumentParser]):
@@ -302,7 +297,6 @@ def prepare_parser_filter(parent: argparse._SubParsersAction[argparse.ArgumentPa
         metavar="key=value",
         nargs="+",
     )
-    add_common_arguments(parse_action_filter)
 
 
 def prepare_parser_simulate(
@@ -314,7 +308,6 @@ def prepare_parser_simulate(
         description=description_action[Action.SIMULATE],
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
-    add_common_arguments(parse_action_simulate)
 
 
 def prepare_parser():
