@@ -177,7 +177,6 @@ def prepare_parser_unpack(parent: argparse._SubParsersAction[argparse.ArgumentPa
         action="store_true",
         default=False,
     )
-    add_anchorfile_argument(parse_action_unpack)
     add_common_arguments(parse_action_unpack)
 
 
@@ -195,7 +194,6 @@ def prepare_parser_summary(parent: argparse._SubParsersAction[argparse.ArgumentP
         type=Summarise,
         help=f"what entity to summarise (choices: {', '.join(summary_choices)})",
     )
-    add_anchorfile_argument(parse_action_summary)
     add_common_arguments(parse_action_summary)
 
 
@@ -233,7 +231,6 @@ def prepare_parser_show(parent: argparse._SubParsersAction[argparse.ArgumentPars
         action="store_true",
         default=False,
     )
-    add_anchorfile_argument(parser_show_cfg)
     add_common_arguments(parser_show_cfg)
 
     # parse the action "show hier"
@@ -251,7 +248,6 @@ def prepare_parser_show(parent: argparse._SubParsersAction[argparse.ArgumentPars
         help="where to save the graph",
         default="hier.dot",
     )
-    add_anchorfile_argument(parser_show_hier)
     add_common_arguments(parser_show_hier)
 
     # parse the action "show tree"
@@ -277,7 +273,6 @@ def prepare_parser_show(parent: argparse._SubParsersAction[argparse.ArgumentPars
         choices=["TB", "LR"],
         required=True,
     )
-    add_anchorfile_argument(parser_show_tree)
     add_common_arguments(parser_show_tree)
 
 
@@ -319,7 +314,6 @@ def prepare_parser_simulate(
         description=description_action[Action.SIMULATE],
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
-    add_anchorfile_argument(parse_action_simulate)
     add_common_arguments(parse_action_simulate)
 
 
@@ -329,6 +323,8 @@ def prepare_parser():
     parser = argparse.ArgumentParser(
         formatter_class=argparse.ArgumentDefaultsHelpFormatter, prog="otter"
     )
+
+    add_anchorfile_argument(parser)
 
     # subparsers for each action (unpack, show, ...)
     subparse_action = parser.add_subparsers(dest="action", metavar="action", required=False)
