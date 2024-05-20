@@ -109,6 +109,11 @@ class ReadConnection(ConnectionBase):
         cur = self._con.execute(query)
         return list(n for (n,) in cur)
 
+    def get_task_label(self, task: TaskID):
+        query = "select user_label from task where id = ?"
+        (label_id,) = self._con.execute(query, (task,)).fetchone()
+        return self.get_string(label_id)
+
     @lru_cache(maxsize=1000)
     def get_string(self, string_id: int) -> str:
         (string,) = self._con.execute(scripts["get_string"], (string_id,)).fetchone()
