@@ -18,6 +18,7 @@ COLOUR_WHITE = (1, 1, 1)
 COLOUR_BLACK = (0, 0, 0)
 COLOUR_GREY = (0.88,) * 3
 COLOUR_RED = (1, 0, 0)
+COLOUR_YELLOW = (1, 1, 0)
 COLOUR_BLUE = (0, 0, 1)
 COLOUR_MAGENTA = (1, 0, 1)
 COLOUR_DARK_GREEN = (0.29, 0.404, 0.255)
@@ -49,12 +50,10 @@ def is_task_create_state(state: TaskSchedulingState):
 def get_phase_colour(state: TaskSchedulingState, reader: ReadConnection, get_colour: ColourMap):
     task = reader.get_task(state.task)
     if is_phase_task(task):
-        return (
-            get_colour[task.attr.label],
-            (0, 0, 0),
-            ALPHA_DEFAULT if state.is_active else ALPHA_LIGHT,
-        )
-    return ((0, 0, 0), (0, 0, 0), 0.00)
+        if state.is_active:
+            return ((1, 1, 1), COLOUR_RED, ALPHA_FULL)
+        return ((1, 1, 1), COLOUR_RED, ALPHA_FULL)
+    return ((0, 0, 0), (0, 0, 0), ALPHA_NOSHOW)
 
 
 def get_phase_plotting_data(state: TaskSchedulingState, **kwargs):
@@ -69,7 +68,7 @@ def get_phase_plotting_data(state: TaskSchedulingState, **kwargs):
 
 
 def make_yaxis_key(state: TaskSchedulingState, reader: ReadConnection, **kwargs) -> Any:
-    return (state.tid_start, reader.get_task_label(state.task))
+    return (state.tid_start, reader.get_task(state.task).attr.create_location)
 
 
 def get_state_colour(
@@ -84,17 +83,17 @@ def get_state_colour(
     else:
         if pred(task):
             if state.is_active:
-                return (COLOUR_DARK_GREEN, COLOUR_BLACK, ALPHA_LIGHT)
+                return (COLOUR_YELLOW, COLOUR_RED, ALPHA_FULL)
             return (COLOUR_RED, COLOUR_RED, ALPHA_FULL)
         elif state.is_active:
-            return (get_colour[task.attr.label], COLOUR_WHITE, ALPHA_LIGHT)
+            return (get_colour[task.attr.label], COLOUR_GREY, ALPHA_LIGHT)
         elif state.action_start == TaskAction.CREATE:
-            return (COLOUR_BLUE, COLOUR_WHITE, ALPHA_NOSHOW)
+            return (COLOUR_BLUE, COLOUR_GREY, ALPHA_NOSHOW)
         elif state.action_start == TaskAction.SUSPEND:
-            return (COLOUR_RED, COLOUR_WHITE, ALPHA_LIGHT)
+            return (COLOUR_RED, COLOUR_GREY, ALPHA_LIGHT)
         else:
             otter.log.debug(f"no colour for {state=}")
-            return (COLOUR_MAGENTA, COLOUR_WHITE, ALPHA_LIGHT)
+            return (COLOUR_MAGENTA, COLOUR_GREY, ALPHA_LIGHT)
 
 
 def get_state_plotting_data(state, **kwargs):
@@ -126,6 +125,7 @@ def plot_scheduling_data(anchorfile: str, /, *, title: Optional[str] = None):
     all_tasks = list(reader.iter_all_task_ids())
 
     #! A temporary hack here
+    otter.log.debug("get critical tasks")
     critical_tasks = list(
         item[0]
         for item in reader._con.execute(
@@ -136,13 +136,17 @@ def plot_scheduling_data(anchorfile: str, /, *, title: Optional[str] = None):
     def is_critical_task(task: Task):
         return task.id in critical_tasks
 
+    otter.log.debug("get non-phase tasks")
     non_phase_tasks = [
         task.id
         for task in reader.iter_all_tasks()
         if not (is_root_task(task) or is_phase_task(task))
     ]
+
+    otter.log.debug("get non-phase tasks scheduling states")
     scheduling_states = reader.get_task_scheduling_states(non_phase_tasks)
 
+    otter.log.debug("build non-phase tasks scheduling states dataframe")
     state_df = pd.DataFrame(
         map(
             partial(
@@ -152,6 +156,7 @@ def plot_scheduling_data(anchorfile: str, /, *, title: Optional[str] = None):
         )
     )
 
+    otter.log.debug("build task-create scheduling states dataframe")
     task_crt_df = pd.DataFrame(
         map(
             partial(
@@ -164,6 +169,7 @@ def plot_scheduling_data(anchorfile: str, /, *, title: Optional[str] = None):
         )
     )
 
+    otter.log.debug("prepare plot")
     fig, ax = plt.subplots()
     ykeys = list(set(state_df["ykey"]))
     ykeys.sort()
@@ -201,6 +207,8 @@ def plot_scheduling_data(anchorfile: str, /, *, title: Optional[str] = None):
             )
             print()
 
+    otter.log.debug("plot data")
+
     # plot the phase data
     ax.broken_barh(
         xranges=phase_sched_df["xrange"],
@@ -211,9 +219,9 @@ def plot_scheduling_data(anchorfile: str, /, *, title: Optional[str] = None):
     )
 
     # plot the regular task data
-    otter.log.info("plotting task scheduling data")
+    otter.log.debug("plotting task scheduling data")
     for ytick, ykey in enumerate(ykeys):
-        otter.log.info(f" -- {ytick=}, {ykey=}")
+        otter.log.debug(f" -- {ytick=}, {ykey=}")
         rows = state_df[state_df["ykey"] == ykey]
         ax.broken_barh(
             xranges=rows["xrange"],
@@ -233,7 +241,7 @@ def plot_scheduling_data(anchorfile: str, /, *, title: Optional[str] = None):
     else:
         ylabel_grp_sz = ylabel_depth.pop()
         assert not ylabel_depth
-        otter.log.info(f"y-label group size: {ylabel_grp_sz}")
+        otter.log.debug(f"y-label group size: {ylabel_grp_sz}")
         ylabel_groups = list(zip(*ykeys))
         ylabel_groups.reverse()
         for offset, ygroup in enumerate(ylabel_groups[1:], start=1):
@@ -257,14 +265,14 @@ def plot_scheduling_data(anchorfile: str, /, *, title: Optional[str] = None):
             y3 = ax.secondary_yaxis(location=0)
             y3.set_yticks(posts, labels=[])
             y3.tick_params("y", length=75, width=1)
-            otter.log.info(f"{ygroup_labels=}, {yrgoup_pos=}, {span=}. {posts=}")
+            otter.log.debug(f"{ygroup_labels=}, {yrgoup_pos=}, {span=}. {posts=}")
 
-        otter.log.info(str(ylabel_groups))
+        otter.log.debug(str(ylabel_groups))
 
     ylabels = [str(k[-1]) for k in ykeys]
     ax.set_yticklabels(ylabels)
     plt.gca().invert_yaxis()
-    otter.log.info(f"set {title=}")
+    otter.log.debug(f"set {title=}")
     plt.title(title)
     plt.xlabel("Time")
     plt.show()
