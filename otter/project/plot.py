@@ -12,9 +12,12 @@ from otter.db.types import Task, TaskSchedulingState
 from otter.db import ReadConnection
 from otter.definitions import TaskAction, TaskID
 from otter.reporting import colour_picker
-from otter.utils.demangle import demangle
+from otter.utils import batched
 
 ColourMap = Mapping[Any, Tuple[float, float, float]]
+ColourGetter = Callable[[Any], Tuple[float, float, float]]
+
+MAX_QUERY_PARAMS = 50000
 
 COLOUR_WHITE = (1, 1, 1)
 COLOUR_BLACK = (0, 0, 0)
@@ -36,9 +39,20 @@ ALPHA_LIGHT = 0.25
 ALPHA_NOSHOW = 0.00
 
 
+def make_colour_getter(colours: ColourMap):
+
+    @lru_cache(maxsize=256)
+    def getter(arg: Any):
+        colour = colours[arg]
+        otter.log.debug(f"get colour for {arg=} -> {colour}")
+        return colours[arg]
+
+    return getter
+
+
 @lru_cache(maxsize=256)
 def get_demangled_label(label: str):
-    result = demangle([label])[0]
+    result = otter.utils.demangle.demangle([label])[0]
     otter.log.debug(f"demangled {label=}, {result=}")
     return result
 
@@ -59,7 +73,7 @@ def is_task_create(state: TaskSchedulingState):
     return state.action_start == TaskAction.CREATE
 
 
-def get_phase_colour(state: TaskSchedulingState, reader: ReadConnection, get_colour: ColourMap):
+def get_phase_colour(state: TaskSchedulingState, reader: ReadConnection, get_colour: ColourGetter):
     if is_phase_task(reader.get_task(state.task)):
         if state.is_active:
             return ((1, 1, 1), COLOUR_RED, ALPHA_FULL)
@@ -86,17 +100,17 @@ def get_state_colour(
     state: TaskSchedulingState,
     pred: Callable[[Task], bool],
     reader: ReadConnection,
-    get_colour: ColourMap,
+    get_colour: ColourGetter,
 ):
     task = reader.get_task(state.task)
     if is_root_task(task) or is_phase_task(task):
-        return (get_colour[task.attr.label], COLOUR_WHITE, ALPHA_NOSHOW)
+        return (get_colour(task.attr.label), COLOUR_WHITE, ALPHA_NOSHOW)
     if pred(task):
         if state.is_active:
             return (COLOUR_YELLOW, COLOUR_RED, ALPHA_FULL)
         return (COLOUR_RED, COLOUR_RED, ALPHA_FULL)
     if state.is_active:
-        return (get_colour[task.attr.label], COLOUR_DGREY, ALPHA_MEDIUM)
+        return (get_colour(task.attr.label), COLOUR_DGREY, ALPHA_MEDIUM)
     if state.action_start == TaskAction.CREATE:
         return (COLOUR_BLUE, COLOUR_DGREY, ALPHA_NOSHOW)
     if state.action_start == TaskAction.SUSPEND:
@@ -149,7 +163,7 @@ def plot_scheduling_data(
 
     title = title or f"Scheduling Data (trace={anchorfile})"
     reader = otter.project.ReadTraceData(anchorfile).connect()
-    get_colour = colour_picker()
+    get_colour = make_colour_getter(colour_picker())
 
     #! A temporary hack here
     otter.log.debug("get critical tasks")
@@ -184,8 +198,19 @@ def plot_scheduling_data(
     )
     print_phase_scheduling_data(reader, phase_sched)
 
-    otter.log.debug("get non-phase tasks' scheduling states")
-    scheduling_states = reader.get_task_scheduling_states(other_tasks)
+    otter.log.debug(f"get non-phase tasks' scheduling states ({len(other_tasks)} tasks)")
+    scheduling_states: List[TaskSchedulingState]
+    if len(other_tasks) < MAX_QUERY_PARAMS:
+        scheduling_states = reader.get_task_scheduling_states(other_tasks)
+    else:
+        otter.log.warning(f"get task scheduling states in batches of {MAX_QUERY_PARAMS})")
+        scheduling_states = []
+        num_batches = 0
+        for n, batch in enumerate(batched(other_tasks, batch_size=MAX_QUERY_PARAMS), start=1):
+            otter.log.warning(f"... prepare batch {n}")
+            scheduling_states.extend(reader.get_task_scheduling_states(list(batch)))
+            num_batches += 1
+        otter.log.warning(f"got all {len(other_tasks)} tasks in {num_batches} batches")
     data_getter = partial(
         get_state_plotting_data, reader=reader, pred=is_critical_task, get_colour=get_colour
     )
@@ -257,7 +282,7 @@ def plot_scheduling_data(
             # Axis for group labels
             y2 = ax.secondary_yaxis(location=-0.1)
             y2.set_yticks(midpoints)
-            y2.set_yticklabels(ygroup_labels, fontsize=18)
+            y2.set_yticklabels([], fontsize=18)
             y2.tick_params("y", length=0)
             y2.spines["left"].set_linewidth(0)
 
