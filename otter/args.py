@@ -329,10 +329,16 @@ def prepare_parser_plot(
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
     parse_action_plot.add_argument(
-        "-t",
         "--title",
         help="plot title",
         default=None,
+    )
+    parse_action_plot.add_argument(
+        "-t",
+        "--task",
+        help="task whose descendants should be plotted",
+        default=None,
+        type=int,
     )
     add_common_arguments(parse_action_plot)
 
