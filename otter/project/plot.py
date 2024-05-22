@@ -18,7 +18,9 @@ ColourMap = Mapping[Any, Tuple[float, float, float]]
 
 COLOUR_WHITE = (1, 1, 1)
 COLOUR_BLACK = (0, 0, 0)
-COLOUR_GREY = (0.88,) * 3
+COLOUR_LGREY = (0.88,) * 3
+COLOUR_GREY = (0.55,) * 3
+COLOUR_DGREY = (0.20,) * 3
 COLOUR_RED = (1, 0, 0)
 COLOUR_YELLOW = (1, 1, 0)
 COLOUR_BLUE = (0, 0, 1)
@@ -89,20 +91,18 @@ def get_state_colour(
     task = reader.get_task(state.task)
     if is_root_task(task) or is_phase_task(task):
         return (get_colour[task.attr.label], COLOUR_WHITE, ALPHA_NOSHOW)
-    else:
-        if pred(task):
-            if state.is_active:
-                return (COLOUR_YELLOW, COLOUR_RED, ALPHA_FULL)
-            return (COLOUR_RED, COLOUR_RED, ALPHA_FULL)
-        elif state.is_active:
-            return (get_colour[task.attr.label], COLOUR_GREY, ALPHA_MEDIUM)
-        elif state.action_start == TaskAction.CREATE:
-            return (COLOUR_BLUE, COLOUR_GREY, ALPHA_NOSHOW)
-        elif state.action_start == TaskAction.SUSPEND:
-            return (COLOUR_RED, COLOUR_GREY, ALPHA_MEDIUM)
-        else:
-            otter.log.debug(f"no colour for {state=}")
-            return (COLOUR_MAGENTA, COLOUR_GREY, ALPHA_FULL)
+    if pred(task):
+        if state.is_active:
+            return (COLOUR_YELLOW, COLOUR_RED, ALPHA_FULL)
+        return (COLOUR_RED, COLOUR_RED, ALPHA_FULL)
+    if state.is_active:
+        return (get_colour[task.attr.label], COLOUR_DGREY, ALPHA_MEDIUM)
+    if state.action_start == TaskAction.CREATE:
+        return (COLOUR_BLUE, COLOUR_DGREY, ALPHA_NOSHOW)
+    if state.action_start == TaskAction.SUSPEND:
+        return (COLOUR_RED, COLOUR_DGREY, ALPHA_MEDIUM)
+    otter.log.debug(f"no colour for {state=}")
+    return (COLOUR_MAGENTA, COLOUR_BLACK, ALPHA_FULL)
 
 
 def get_state_plotting_data(state, **kwargs):
