@@ -1,16 +1,18 @@
-from typing import Optional, Callable, Mapping, Tuple, Any
-from functools import partial
+from typing import Optional, Callable, Mapping, Tuple, Any, List, Iterable
+from functools import partial, lru_cache
 from collections import Counter
 from itertools import count
 
 import pandas as pd
-import otter
 from matplotlib import pyplot as plt
+
+import otter
 
 from otter.db.types import Task, TaskSchedulingState
 from otter.db import ReadConnection
-from otter.definitions import TaskAction
+from otter.definitions import TaskAction, TaskID
 from otter.reporting import colour_picker
+from otter.utils.demangle import demangle
 
 ColourMap = Mapping[Any, Tuple[float, float, float]]
 
@@ -23,12 +25,20 @@ COLOUR_BLUE = (0, 0, 1)
 COLOUR_MAGENTA = (1, 0, 1)
 COLOUR_DARK_GREEN = (0.29, 0.404, 0.255)
 COLOUR_ORANGE = (1, 0.643, 0.125)
-X_SCALE_FACTOR = 1_000_000_000
+TIME_SCALE_FACTOR = 1_000_000_000
 
 ALPHA_FULL = 1.00
 ALPHA_DEFAULT = 0.85
+ALPHA_MEDIUM = 0.55
 ALPHA_LIGHT = 0.25
 ALPHA_NOSHOW = 0.00
+
+
+@lru_cache(maxsize=256)
+def get_demangled_label(label: str):
+    result = demangle([label])[0]
+    otter.log.debug(f"demangled {label=}, {result=}")
+    return result
 
 
 def is_root_task(task: Task):
@@ -43,13 +53,12 @@ def is_leaf_task(task: Task):
     return task.children == 0
 
 
-def is_task_create_state(state: TaskSchedulingState):
+def is_task_create(state: TaskSchedulingState):
     return state.action_start == TaskAction.CREATE
 
 
 def get_phase_colour(state: TaskSchedulingState, reader: ReadConnection, get_colour: ColourMap):
-    task = reader.get_task(state.task)
-    if is_phase_task(task):
+    if is_phase_task(reader.get_task(state.task)):
         if state.is_active:
             return ((1, 1, 1), COLOUR_RED, ALPHA_FULL)
         return ((1, 1, 1), COLOUR_RED, ALPHA_FULL)
@@ -59,7 +68,7 @@ def get_phase_colour(state: TaskSchedulingState, reader: ReadConnection, get_col
 def get_phase_plotting_data(state: TaskSchedulingState, **kwargs):
     face, edge, alpha = get_phase_colour(state, **kwargs)
     base = {
-        "xrange": (state.start_ts / X_SCALE_FACTOR, state.duration / X_SCALE_FACTOR),
+        "xrange": (state.start_ts / TIME_SCALE_FACTOR, state.duration / TIME_SCALE_FACTOR),
         "facecolor": face,
         "edgecolor": edge,
         "alpha": alpha,
@@ -68,7 +77,7 @@ def get_phase_plotting_data(state: TaskSchedulingState, **kwargs):
 
 
 def make_yaxis_key(state: TaskSchedulingState, reader: ReadConnection, **kwargs) -> Any:
-    return (state.tid_start, reader.get_task(state.task).attr.create_location)
+    return (state.tid_start, get_demangled_label(reader.get_task_label(state.task)))
 
 
 def get_state_colour(
@@ -86,20 +95,20 @@ def get_state_colour(
                 return (COLOUR_YELLOW, COLOUR_RED, ALPHA_FULL)
             return (COLOUR_RED, COLOUR_RED, ALPHA_FULL)
         elif state.is_active:
-            return (get_colour[task.attr.label], COLOUR_GREY, ALPHA_LIGHT)
+            return (get_colour[task.attr.label], COLOUR_GREY, ALPHA_MEDIUM)
         elif state.action_start == TaskAction.CREATE:
             return (COLOUR_BLUE, COLOUR_GREY, ALPHA_NOSHOW)
         elif state.action_start == TaskAction.SUSPEND:
-            return (COLOUR_RED, COLOUR_GREY, ALPHA_LIGHT)
+            return (COLOUR_RED, COLOUR_GREY, ALPHA_MEDIUM)
         else:
             otter.log.debug(f"no colour for {state=}")
-            return (COLOUR_MAGENTA, COLOUR_GREY, ALPHA_LIGHT)
+            return (COLOUR_MAGENTA, COLOUR_GREY, ALPHA_FULL)
 
 
 def get_state_plotting_data(state, **kwargs):
     face, edge, alpha = get_state_colour(state, **kwargs)
     base = {
-        "xrange": (state.start_ts / X_SCALE_FACTOR, state.duration / X_SCALE_FACTOR),
+        "xrange": (state.start_ts / TIME_SCALE_FACTOR, state.duration / TIME_SCALE_FACTOR),
         "ykey": make_yaxis_key(state, **kwargs),
         "facecolor": face,
         "edgecolor": edge,
@@ -110,19 +119,37 @@ def get_state_plotting_data(state, **kwargs):
 
 def get_task_crt_plotting_data(state, **kwargs):
     base = {
-        "x": state.start_ts / X_SCALE_FACTOR,
+        "x": state.start_ts / TIME_SCALE_FACTOR,
         "ykey": make_yaxis_key(state, **kwargs),
     }
     return base
 
 
-def plot_scheduling_data(anchorfile: str, /, *, title: Optional[str] = None):
+def partition_tasks(tasks: Iterable[TaskID], pred: Callable[[TaskID], bool]):
+    accept: List[TaskID] = []
+    reject: List[TaskID] = []
+    for task in tasks:
+        if pred(task):
+            accept.append(task)
+        else:
+            reject.append(task)
+    return accept, reject
+
+
+def get_scheduling_states(reader: ReadConnection, task: TaskID):
+    tasks = reader.get_descendants_of(task)
+    states = reader.get_task_scheduling_states(tasks)
+    return states
+
+
+def plot_scheduling_data(
+    anchorfile: str, /, *, task: Optional[TaskID], title: Optional[str] = None
+):
     otter.log.info(f"plotting from anchorfile: {anchorfile}")
 
     title = title or f"Scheduling Data (trace={anchorfile})"
     reader = otter.project.ReadTraceData(anchorfile).connect()
     get_colour = colour_picker()
-    all_tasks = list(reader.iter_all_task_ids())
 
     #! A temporary hack here
     otter.log.debug("get critical tasks")
@@ -136,58 +163,133 @@ def plot_scheduling_data(anchorfile: str, /, *, title: Optional[str] = None):
     def is_critical_task(task: Task):
         return task.id in critical_tasks
 
-    otter.log.debug("get non-phase tasks")
-    non_phase_tasks = [
-        task.id
-        for task in reader.iter_all_tasks()
-        if not (is_root_task(task) or is_phase_task(task))
-    ]
+    root_task = reader.get_root_task()
+    if task is None:
+        task = root_task
 
-    otter.log.debug("get non-phase tasks scheduling states")
-    scheduling_states = reader.get_task_scheduling_states(non_phase_tasks)
+    otter.log.debug(f"plot task {task} and descendants")
+    otter.log.debug(f"{reader.get_task(task)}")
 
-    otter.log.debug("build non-phase tasks scheduling states dataframe")
-    state_df = pd.DataFrame(
-        map(
-            partial(
-                get_state_plotting_data, reader=reader, pred=is_critical_task, get_colour=get_colour
-            ),
-            scheduling_states,
-        )
+    task_coll = reader.get_descendants_of(task)
+    if task != root_task:
+        task_coll.append(task)
+    phase_tasks, other_tasks = partition_tasks(
+        task_coll, pred=lambda task: reader.get_task_label(task).startswith("OTTER PHASE")
     )
 
-    otter.log.debug("build task-create scheduling states dataframe")
-    task_crt_df = pd.DataFrame(
-        map(
-            partial(
-                get_task_crt_plotting_data,
-                reader=reader,
-                pred=is_critical_task,
-                get_colour=get_colour,
-            ),
-            filter(is_task_create_state, scheduling_states),
-        )
-    )
-
-    otter.log.debug("prepare plot")
-    fig, ax = plt.subplots()
-    ykeys = list(set(state_df["ykey"]))
-    ykeys.sort()
-    num_rows = len(ykeys)
-
-    phase_tasks = [task.id for task in reader.iter_all_tasks() if is_phase_task(task)]
+    otter.log.debug("get phase tasks' scheduling states")
     phase_sched = reader.get_task_scheduling_states(phase_tasks)
     phase_sched_df = pd.DataFrame(
         map(partial(get_phase_plotting_data, reader=reader, get_colour=get_colour), phase_sched)
     )
+    print_phase_scheduling_data(reader, phase_sched)
 
-    # print the phase scheduling data
-    for s in phase_sched:
+    otter.log.debug("get non-phase tasks' scheduling states")
+    scheduling_states = reader.get_task_scheduling_states(other_tasks)
+    data_getter = partial(
+        get_state_plotting_data, reader=reader, pred=is_critical_task, get_colour=get_colour
+    )
+    state_df = pd.DataFrame(map(data_getter, scheduling_states))
+    task_crt_getter = partial(
+        get_task_crt_plotting_data, reader=reader, pred=is_critical_task, get_colour=get_colour
+    )
+
+    otter.log.debug("build task-create scheduling states dataframe")
+    task_crt_df = pd.DataFrame(map(task_crt_getter, filter(is_task_create, scheduling_states)))
+
+    fig, ax = plt.subplots()
+    ykeys = list(set(state_df["ykey"]))
+    ykeys.sort()
+    ymax = len(ykeys)
+
+    otter.log.debug("plot data")
+
+    # plot the phase data
+    if phase_sched_df.empty:
+        otter.log.warning("no phase tasks were found to plot")
+    else:
+        ax.broken_barh(
+            xranges=phase_sched_df["xrange"],
+            yrange=(0, ymax),
+            facecolors=phase_sched_df["facecolor"],
+            edgecolor=phase_sched_df["edgecolor"],
+            alpha=phase_sched_df["alpha"],
+        )
+
+    # plot the regular task data
+    otter.log.debug("plotting task scheduling data")
+    for ytick, ykey in enumerate(ykeys):
+        otter.log.debug(f" -- {ytick=}, {ykey=}")
+        rows = state_df[state_df["ykey"] == ykey]
+        ax.broken_barh(
+            xranges=rows["xrange"],
+            yrange=(ytick + 0.075, 0.85),
+            facecolors=rows["facecolor"],
+            edgecolor=rows["edgecolor"],
+            alpha=rows["alpha"],
+        )
+        crt_rows = task_crt_df[task_crt_df["ykey"] == ykey]
+        ax.plot(crt_rows["x"], [ytick + 0.5] * len(crt_rows.index), "k.")
+
+    ax.set_yticks([x + 0.5 for x in range(len(ykeys))])
+    ylabel_depth = set(map(len, ykeys))
+    if len(ylabel_depth) != 1:
+        otter.log.warning(f"multiple y-label group sizes found: {ylabel_depth}")
+        ylabels = [str(k[-1]) for k in ykeys]
+    else:
+        ylabel_grp_sz = ylabel_depth.pop()
+        assert not ylabel_depth
+        otter.log.debug(f"y-label group size: {ylabel_grp_sz}")
+        ylabel_groups = list(zip(*ykeys))
+        ylabel_groups.reverse()
+        for offset, ygroup in enumerate(ylabel_groups[1:], start=1):
+
+            # Make labels
+            ygroup_labels = list(map(str, dict(zip(ygroup, count())).keys()))
+
+            # Axis for lines between groups
+            span = Counter(ygroup)
+            posts = [0]
+            for v in span.values():
+                posts.append(posts[-1] + v)
+            midpoints = [(a + b) / 2 for (a, b) in zip(posts[0:-1], posts[1:])]
+
+            # Axis for group labels
+            y2 = ax.secondary_yaxis(location=-0.1)
+            y2.set_yticks(midpoints)
+            y2.set_yticklabels(ygroup_labels, fontsize=18)
+            y2.tick_params("y", length=0)
+            y2.spines["left"].set_linewidth(0)
+
+            # Bars between groups
+            y3 = ax.secondary_yaxis(location=0)
+            y3.set_yticks(posts, labels=[])
+            y3.tick_params("y", length=75, width=1)
+
+            otter.log.debug(f"axis labelling data for group {offset}:")
+            otter.log.debug(f"  {ygroup=}")
+            otter.log.debug(f"  {ygroup_labels=}")
+            otter.log.debug(f"  {midpoints=}")
+            otter.log.debug(f"  {posts=}")
+            otter.log.debug(f"  {span=}")
+
+        otter.log.debug(str(ylabel_groups))
+
+    ylabels = [str(k[-1]) for k in ykeys]
+    ax.set_yticklabels(ylabels, fontsize=16)
+    plt.gca().invert_yaxis()
+    otter.log.debug(f"set {title=}")
+    plt.title(title, fontsize=20)
+    plt.xlabel("Time", fontsize=18)
+    plt.show()
+
+
+def print_phase_scheduling_data(reader: ReadConnection, data: List[TaskSchedulingState]):
+    for s in data:
         if s.action_start == TaskAction.CREATE:
             continue
         if s.action_start == TaskAction.START:
-            task = reader.get_task(s.task)
-            print(f"  PHASE ID: {s.task:>8d} [label: {task.attr.label}]")
+            print(f"  PHASE ID: {s.task:>8d} [label: {reader.get_task_label(s.task)}]")
             print(
                 f"  {'TIME':<15s} | {' DURATION':<15s} | {' CHILDREN':<9s} | {' DESC.':<9s} | {' ACTION':<9s} | {' LOCATION':<14s}"
             )
@@ -206,74 +308,3 @@ def plot_scheduling_data(anchorfile: str, /, *, title: Optional[str] = None):
                 f"{s.end_ts:>17,d} | {'-':>15s} | {'-':>9s} | {'-':>9s} | {s.action_end.name:<9s} | {s.end_location}"
             )
             print()
-
-    otter.log.debug("plot data")
-
-    # plot the phase data
-    ax.broken_barh(
-        xranges=phase_sched_df["xrange"],
-        yrange=(0, num_rows),
-        facecolors=phase_sched_df["facecolor"],
-        edgecolor=(0.65,) * 3,
-        alpha=phase_sched_df["alpha"],
-    )
-
-    # plot the regular task data
-    otter.log.debug("plotting task scheduling data")
-    for ytick, ykey in enumerate(ykeys):
-        otter.log.debug(f" -- {ytick=}, {ykey=}")
-        rows = state_df[state_df["ykey"] == ykey]
-        ax.broken_barh(
-            xranges=rows["xrange"],
-            yrange=(ytick + 0.075, 0.85),
-            facecolors=rows["facecolor"],
-            edgecolor=(0, 0, 0),
-            alpha=rows["alpha"],
-        )
-        crt = task_crt_df[task_crt_df["ykey"] == ykey]
-        ax.plot(crt["x"], [ytick + 0.5] * len(crt["x"]), "k.")
-
-    ax.set_yticks([x + 0.5 for x in range(len(ykeys))])
-    ylabel_depth = set(map(len, ykeys))
-    if len(ylabel_depth) != 1:
-        otter.log.warning(f"multiple y-label group sizes found: {ylabel_depth}")
-        ylabels = [str(k[-1]) for k in ykeys]
-    else:
-        ylabel_grp_sz = ylabel_depth.pop()
-        assert not ylabel_depth
-        otter.log.debug(f"y-label group size: {ylabel_grp_sz}")
-        ylabel_groups = list(zip(*ykeys))
-        ylabel_groups.reverse()
-        for offset, ygroup in enumerate(ylabel_groups[1:], start=1):
-            df = pd.DataFrame(zip(ygroup, count()))
-            span = Counter(ygroup)
-            levels = df.groupby(by=0).mean()
-            ygroup_labels = ["\n" * offset + str(x) for x in levels.index]
-            yrgoup_pos = list(levels.iloc[:, 0])
-
-            # Axis for group labels
-            y2 = ax.secondary_yaxis(location=-0.1)
-            y2.set_yticks(yrgoup_pos)
-            y2.set_yticklabels(ygroup_labels)
-            y2.tick_params("y", length=0)
-            y2.spines["left"].set_linewidth(0)
-
-            # Axis for lines between groups
-            posts = [0]
-            for group, v in span.items():
-                posts.append(posts[-1] + v)
-            y3 = ax.secondary_yaxis(location=0)
-            y3.set_yticks(posts, labels=[])
-            y3.tick_params("y", length=75, width=1)
-            otter.log.debug(f"{ygroup_labels=}, {yrgoup_pos=}, {span=}. {posts=}")
-
-        otter.log.debug(str(ylabel_groups))
-
-    ylabels = [str(k[-1]) for k in ykeys]
-    ax.set_yticklabels(ylabels)
-    plt.gca().invert_yaxis()
-    otter.log.debug(f"set {title=}")
-    plt.title(title)
-    plt.xlabel("Time")
-    plt.show()
-    return
