@@ -1,6 +1,7 @@
 import otter.log
 
 from otter.args import Summarise
+from otter.utils.demangle import demangle as demangle_tokens
 
 from .project import ReadTraceData
 
@@ -8,6 +9,7 @@ from .project import ReadTraceData
 def summarise_tasks_db(
     anchorfile: str,
     summarise: Summarise,
+    demangle: bool = False,
     debug: bool = False,
 ) -> None:
     """Print summary information about a tasks database"""
@@ -32,7 +34,7 @@ def summarise_tasks_db(
             for attr, num_tasks in con.iter_all_task_types():
                 print(
                     num_tasks,
-                    attr.label,
+                    demangle_tokens([attr.label])[0] if demangle else attr.label,
                     f"{attr.create_location.file}:{attr.create_location.line}",
                     f"{attr.start_location.file}:{attr.start_location.line}",
                     f"{attr.end_location.file}:{attr.end_location.line}",

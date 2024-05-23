@@ -197,6 +197,12 @@ def prepare_parser_summary(parent: argparse._SubParsersAction[argparse.ArgumentP
         type=Summarise,
         help=f"what entity to summarise (choices: {', '.join(summary_choices)})",
     )
+    parse_action_summary.add_argument(
+        "--demangle",
+        action="store_true",
+        default=False,
+        help=f"if set, attempt to demangle task labels as if they are C++ type names (using c++filt)",
+    )
 
 
 def prepare_parser_show(parent: argparse._SubParsersAction[argparse.ArgumentParser]):

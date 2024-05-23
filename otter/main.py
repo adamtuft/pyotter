@@ -55,7 +55,9 @@ def _select_action(args) -> None:
                 otter.log.error(f"unknown graph type: {args.show}")
                 raise SystemExit(1)
         elif args.action == Action.SUMMARY:
-            otter.project.summarise_tasks_db(args.anchorfile, args.summarise, debug=debug)
+            otter.project.summarise_tasks_db(
+                args.anchorfile, args.summarise, demangle=args.demangle, debug=debug
+            )
         elif args.action == Action.FILTER:
             otter.project.print_filter_to_stdout(bool(args.include), args.include or args.exclude)
         elif args.action == Action.SIMULATE:
