@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Optional, List, Dict, Tuple, NamedTuple, Self
+from typing import Optional, List, Dict, NamedTuple, Self
 from itertools import count
 
 import otter.log
@@ -49,39 +49,10 @@ class TaskScheduler(Loggable):
 
     def run(self) -> None:
         global_ts = 0
-        root_task = self.reader.get_task(self.reader.get_root_task())
-        phase_states = self.get_phase_states()
-        assert len(phase_states) == root_task.children
-        for mode, (phase,) in phase_states:
+        phase_tasks = self.reader.get_children_of(self.reader.get_root_task())
+        phase_tasks.sort()
+        for phase in phase_tasks:
             global_ts = self.simulate_phase(global_ts, phase)
-
-    def get_phase_states(self):
-        root = self.reader.get_root_task()
-        root_suspend_mode = dict(self.reader.get_task_suspend_meta(root))
-        phase_data: List[Tuple[TaskSyncMode, List[TaskID]]] = []
-        children: List[TaskID]
-        for root_state in self.reader.get_task_scheduling_states((root,)):
-            if root_state.is_active:
-                children = [
-                    item[0]
-                    for item in self.reader.get_children_created_between(
-                        root, root_state.start_ts, root_state.end_ts
-                    )
-                ]
-                if not children:
-                    continue
-                assert len(children) == 1, "invalid root children"
-            elif root_state.action_start == TaskAction.SUSPEND:
-                mode = root_suspend_mode[root_state.start_ts]
-                phase_data.append((mode, children))
-            elif root_state.action_start == TaskAction.END:
-                ...
-            elif root_state.action_start == TaskAction.CREATE:
-                ...
-            else:
-                self.log_error(f"unhandled root state: {root_state}")
-
-        return phase_data
 
     def simulate_phase(self, global_ts: int, phase_id: TaskID):
         phase = self.reader.get_task(phase_id)
