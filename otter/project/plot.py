@@ -280,14 +280,18 @@ def plot_scheduling_data(
             midpoints = [(a + b) / 2 for (a, b) in zip(posts[0:-1], posts[1:])]
 
             # Axis for group labels
-            y2 = ax.secondary_yaxis(location=-0.1)
+            y2 = ax.secondary_yaxis(location=1)
+            y2.yaxis.set_label_position("right")
+            y2.yaxis.tick_right()
             y2.set_yticks(midpoints)
             y2.set_yticklabels([], fontsize=18)
             y2.tick_params("y", length=0)
             y2.spines["left"].set_linewidth(0)
 
             # Bars between groups
-            y3 = ax.secondary_yaxis(location=0)
+            y3 = ax.secondary_yaxis(location=1)
+            y3.yaxis.set_label_position("right")
+            y3.yaxis.tick_right()
             y3.set_yticks(posts, labels=[])
             y3.tick_params("y", length=75, width=1)
 
@@ -301,6 +305,8 @@ def plot_scheduling_data(
         otter.log.debug(str(ylabel_groups))
 
     ylabels = [str(k[-1]) for k in ykeys]
+    ax.yaxis.set_label_position("right")
+    ax.yaxis.tick_right()
     ax.set_yticklabels(ylabels, fontsize=16)
     plt.gca().invert_yaxis()
     otter.log.debug(f"set {title=}")
