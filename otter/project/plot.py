@@ -1,3 +1,4 @@
+import math
 from typing import Optional, Callable, Mapping, Tuple, Any, List, Iterable
 from functools import partial, lru_cache
 from collections import Counter
@@ -5,6 +6,8 @@ from itertools import count
 
 import pandas as pd
 from matplotlib import pyplot as plt
+from matplotlib import backend_bases as mbb
+from matplotlib import collections as mcol
 
 import otter
 
@@ -230,10 +233,11 @@ def plot_scheduling_data(
     otter.log.debug("plot data")
 
     # plot the phase data
+    phase_polycoll: Optional[mcol.PolyCollection] = None
     if phase_sched_df.empty:
         otter.log.warning("no phase tasks were found to plot")
     else:
-        ax.broken_barh(
+        phase_polycoll = ax.broken_barh(
             xranges=phase_sched_df["xrange"],
             yrange=(0, ymax),
             facecolors=phase_sched_df["facecolor"],
@@ -306,6 +310,56 @@ def plot_scheduling_data(
     otter.log.debug(f"set {title=}")
     plt.title(title, fontsize=20)
     plt.xlabel("Time", fontsize=18)
+
+    annot = ax.annotate(
+        "",
+        xy=(0, 0),
+        xytext=(-20, 20),
+        textcoords="offset points",
+        bbox=dict(boxstyle="round", fc="white", ec="b", lw=2),
+        arrowprops=dict(arrowstyle="->"),
+    )
+    annot.set_visible(False)
+
+    def update_annot(state: TaskSchedulingState):
+        x = (state.start_ts + state.end_ts) / 2 / TIME_SCALE_FACTOR
+        y = 0
+        annot.xy = (x, y)
+        annot.set_text(f"{reader.get_task_label(state.task)}")
+        annot.get_bbox_patch().set_alpha(ALPHA_FULL)
+
+    def on_motion_notify_event(event: mbb.Event):
+        assert isinstance(event, mbb.MouseEvent)
+        axes = event.inaxes
+        ytrack = math.floor(event.ydata) if event.ydata is not None else None
+        if axes is None:
+            otter.log.debug(
+                f"[motion_notify_event] (no axes) {event.xdata=}, {ytrack=}, {event.ydata=}"
+            )
+            annot.set_visible(False)
+            fig.canvas.draw_idle()
+        else:
+            assert phase_polycoll is not None, "No phase polygons were plotted"
+            contains, data = phase_polycoll.contains(event)
+            otter.log.debug(
+                f"[motion_notify_event] (in axes) {contains=}, {data=}, {event.xdata=}, {ytrack=}, {event.ydata=}"
+            )
+            if contains:
+                for thing in data["ind"]:
+                    state = phase_sched[thing]
+                    label = reader.get_task_label(state.task)
+                    # otter.log.debug(
+                    #     f" -- state: {label=}, {state.is_active=}, state.start_ts={state.start_ts/TIME_SCALE_FACTOR}, state.end_ts={state.end_ts/TIME_SCALE_FACTOR}"
+                    # )
+                    otter.log.debug(f" -- {label=}")
+                    update_annot(state)
+                    annot.set_visible(True)
+                    fig.canvas.draw_idle()
+                    break  # after 1st item
+
+    # fig.canvas.mpl_connect("motion_notify_event", on_motion_notify_event)
+    fig.canvas.mpl_connect("button_press_event", on_motion_notify_event)
+
     plt.show()
 
 
