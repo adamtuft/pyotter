@@ -33,7 +33,9 @@ COLOUR_BLUE = (0, 0, 1)
 COLOUR_MAGENTA = (1, 0, 1)
 COLOUR_DARK_GREEN = (0.29, 0.404, 0.255)
 COLOUR_ORANGE = (1, 0.643, 0.125)
+
 TIME_SCALE_FACTOR = 1_000_000_000
+TIME_SCALE_UNITS = "sec."
 
 ALPHA_FULL = 1.00
 ALPHA_DEFAULT = 0.85
@@ -334,12 +336,16 @@ def plot_scheduling_data(
         textcoords="offset points",
         bbox={"boxstyle": "square, pad=0.5", "fc": "yellow", "ec": "r", "lw": 1},
         arrowprops={"arrowstyle": "->"},
+        fontfamily="monospace",
+        fontsize=8.5,
     )
     annotate_state.set_visible(False)
 
     def add_annotation_phase(event: mbb.MouseEvent, annot, fig, coll):
         # toggle an annotation for the selected phase
-        assert coll is not None, "No phase polygons were plotted"
+        if coll is None:
+            otter.log.warning("no phase polygons were plotted")
+            return
         axes = event.inaxes
         if axes is None:
             annot.set_visible(False)
@@ -359,7 +365,7 @@ def plot_scheduling_data(
         annot.set_visible(True)
         fig.canvas.draw_idle()
         annot.xy = (30, 30)
-        annot.set_text(f"{reader.get_task_label(state.task)}")
+        annot.set_text(f"phase id {state.task}: {reader.get_task_label(state.task)}")
         annot.get_bbox_patch().set_alpha(ALPHA_FULL)
 
     def add_annotation_task_state(event: mbb.MouseEvent, annot, fig, coll_map):
@@ -371,13 +377,14 @@ def plot_scheduling_data(
             return
         if event.ydata is None:
             return
+        x0, y0, w, h = axes.viewLim.bounds
         ytick = math.floor(event.ydata)
         coll: mcol.PolyCollection = coll_map[ytick]
         contains, data = coll.contains(event)
         if not (contains and data):
             return
         # poly = coll[data["ind"][0]]
-        point = coll.get_paths()[data["ind"][0]].get_extents().get_points()[0]
+        x, y = coll.get_paths()[data["ind"][0]].get_extents().get_points()[0]
         rows = state_rows[ytick]
         row: int = rows.iloc[data["ind"][0], :]["__row__"]
         state = scheduling_states[row]
@@ -386,8 +393,16 @@ def plot_scheduling_data(
         )
         annot.set_visible(True)
         fig.canvas.draw_idle()
-        annot.xy = point
-        text = f"{state.action_start.name} -> {state.action_end.name}\n{state.start_location}\n{state.end_location}"
+        annot.xy = max(x0, x), y
+        text = "\n".join(
+            [
+                f"task {state.task}: {state.action_start.name} -> {state.action_end.name}",
+                f"{get_demangled_label(reader.get_task_label(state.task))}",
+                f"{state.start_location}",
+                f"{state.end_location}",
+                f"duration: {state.duration/TIME_SCALE_FACTOR} {TIME_SCALE_UNITS}",
+            ]
+        )
         annot.set_text(text)
         annot.get_bbox_patch().set_alpha(ALPHA_FULL)
 
