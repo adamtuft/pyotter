@@ -214,15 +214,17 @@ def plot_scheduling_data(
             scheduling_states.extend(reader.get_task_scheduling_states(list(batch)))
             num_batches += 1
         otter.log.warning(f"got all {len(other_tasks)} tasks in {num_batches} batches")
+
     data_getter = partial(
         get_state_plotting_data, reader=reader, pred=is_critical_task, get_colour=get_colour
     )
     state_df = pd.DataFrame(map(data_getter, scheduling_states))
+    state_df["__row__"] = range(len(state_df))
+
+    otter.log.debug("build task-create scheduling states dataframe")
     task_crt_getter = partial(
         get_task_crt_plotting_data, reader=reader, pred=is_critical_task, get_colour=get_colour
     )
-
-    otter.log.debug("build task-create scheduling states dataframe")
     task_crt_df = pd.DataFrame(map(task_crt_getter, filter(is_task_create, scheduling_states)))
 
     fig, ax = plt.subplots()
@@ -247,10 +249,13 @@ def plot_scheduling_data(
 
     # plot the regular task data
     otter.log.debug("plotting task scheduling data")
-    for ytick, ykey in enumerate(ykeys):
+    state_polycoll: Mapping[int, mcol.PolyCollection] = {}
+    ykey_map = dict(zip(count(), ykeys))
+    state_rows = {ytick: state_df[state_df["ykey"] == ykey] for ytick, ykey in ykey_map.items()}
+    for ytick, ykey in ykey_map.items():
         otter.log.debug(f" -- {ytick=}, {ykey=}")
-        rows = state_df[state_df["ykey"] == ykey]
-        ax.broken_barh(
+        rows = state_rows[ytick]
+        state_polycoll[ytick] = ax.broken_barh(
             xranges=rows["xrange"],
             yrange=(ytick + 0.075, 0.85),
             facecolors=rows["facecolor"],
@@ -311,53 +316,86 @@ def plot_scheduling_data(
     plt.title(title, fontsize=20)
     plt.xlabel("Time", fontsize=18)
 
-    annot = ax.annotate(
+    annotate_phase = ax.annotate(
         "",
         xy=(0, 0),
-        xytext=(-20, 20),
+        xycoords="figure pixels",
         textcoords="offset points",
-        bbox=dict(boxstyle="round", fc="white", ec="b", lw=2),
-        arrowprops=dict(arrowstyle="->"),
+        bbox={"boxstyle": "square, pad=0.5", "fc": "yellow", "ec": "r", "lw": 1},
+        arrowprops={"arrowstyle": "->"},
     )
-    annot.set_visible(False)
+    annotate_phase.set_visible(False)
 
-    def update_annot(state: TaskSchedulingState):
-        x = (state.start_ts + state.end_ts) / 2 / TIME_SCALE_FACTOR
-        y = 0
-        annot.xy = (x, y)
+    annotate_state = ax.annotate(
+        "",
+        xy=(0, 0),
+        xytext=(15, 15),
+        xycoords="data",
+        textcoords="offset points",
+        bbox={"boxstyle": "square, pad=0.5", "fc": "yellow", "ec": "r", "lw": 1},
+        arrowprops={"arrowstyle": "->"},
+    )
+    annotate_state.set_visible(False)
+
+    def add_annotation_phase(event: mbb.MouseEvent, annot, fig, coll):
+        # toggle an annotation for the selected phase
+        assert coll is not None, "No phase polygons were plotted"
+        axes = event.inaxes
+        if axes is None:
+            annot.set_visible(False)
+            fig.canvas.draw_idle()
+            return
+        x0, y0, w, h = axes.viewLim.bounds
+        contains, data = coll.contains(event)
+        if not (contains and data):
+            return
+        ytrack = math.floor(event.ydata) if event.ydata is not None else None
+        otter.log.debug(
+            f"[motion_notify_event] (in axes) ({event.x}, {event.y}) {contains=}, {data=}, {event.xdata=}, {event.ydata=}"
+        )
+        state = phase_sched[data["ind"][0]]
+        label = reader.get_task_label(state.task)
+        otter.log.debug(f" -- {label=}")
+        annot.set_visible(True)
+        fig.canvas.draw_idle()
+        annot.xy = (30, 30)
         annot.set_text(f"{reader.get_task_label(state.task)}")
+        annot.get_bbox_patch().set_alpha(ALPHA_FULL)
+
+    def add_annotation_task_state(event: mbb.MouseEvent, annot, fig, coll_map):
+        # toggle an annotation for the selected state
+        axes = event.inaxes
+        if axes is None:
+            annot.set_visible(False)
+            fig.canvas.draw_idle()
+            return
+        if event.ydata is None:
+            return
+        ytick = math.floor(event.ydata)
+        coll: mcol.PolyCollection = coll_map[ytick]
+        contains, data = coll.contains(event)
+        if not (contains and data):
+            return
+        # poly = coll[data["ind"][0]]
+        point = coll.get_paths()[data["ind"][0]].get_extents().get_points()[0]
+        rows = state_rows[ytick]
+        row: int = rows.iloc[data["ind"][0], :]["__row__"]
+        state = scheduling_states[row]
+        otter.log.debug(
+            f"[motion_notify_event] (in axes) ({event.x}, {event.y}) {contains=}, {data=}, {event.xdata=}, {event.ydata=}, {ytick=}, {row=}, {state=}"
+        )
+        annot.set_visible(True)
+        fig.canvas.draw_idle()
+        annot.xy = point
+        text = f"{state.action_start.name} -> {state.action_end.name}\n{state.start_location}\n{state.end_location}"
+        annot.set_text(text)
         annot.get_bbox_patch().set_alpha(ALPHA_FULL)
 
     def on_motion_notify_event(event: mbb.Event):
         assert isinstance(event, mbb.MouseEvent)
-        axes = event.inaxes
-        ytrack = math.floor(event.ydata) if event.ydata is not None else None
-        if axes is None:
-            otter.log.debug(
-                f"[motion_notify_event] (no axes) {event.xdata=}, {ytrack=}, {event.ydata=}"
-            )
-            annot.set_visible(False)
-            fig.canvas.draw_idle()
-        else:
-            assert phase_polycoll is not None, "No phase polygons were plotted"
-            contains, data = phase_polycoll.contains(event)
-            otter.log.debug(
-                f"[motion_notify_event] (in axes) {contains=}, {data=}, {event.xdata=}, {ytrack=}, {event.ydata=}"
-            )
-            if contains:
-                for thing in data["ind"]:
-                    state = phase_sched[thing]
-                    label = reader.get_task_label(state.task)
-                    # otter.log.debug(
-                    #     f" -- state: {label=}, {state.is_active=}, state.start_ts={state.start_ts/TIME_SCALE_FACTOR}, state.end_ts={state.end_ts/TIME_SCALE_FACTOR}"
-                    # )
-                    otter.log.debug(f" -- {label=}")
-                    update_annot(state)
-                    annot.set_visible(True)
-                    fig.canvas.draw_idle()
-                    break  # after 1st item
+        add_annotation_phase(event, annotate_phase, fig, phase_polycoll)
+        add_annotation_task_state(event, annotate_state, fig, state_polycoll)
 
-    # fig.canvas.mpl_connect("motion_notify_event", on_motion_notify_event)
     fig.canvas.mpl_connect("button_press_event", on_motion_notify_event)
 
     plt.show()
