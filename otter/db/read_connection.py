@@ -62,9 +62,7 @@ class ReadConnection(ConnectionBase):
         return count
 
     def get_children_of(self, parent: TaskID) -> List[TaskID]:
-        query = "select child_id from task_relation where parent_id in (?)"
-        cur = self._con.execute(query, (parent,))
-        return [task for (task,) in cur]
+        return list(self.iter_children_of(parent))
 
     def get_ancestors_of(self, task: TaskID) -> List[TaskID]:
         cur = self._con.execute(scripts["get_ancestors"], (task,))
@@ -94,6 +92,11 @@ class ReadConnection(ConnectionBase):
 
     def get_task(self, task: TaskID):
         return self.get_tasks((task,))[0]
+
+    def iter_children_of(self, parent: TaskID) -> Generator[TaskID, None, None]:
+        query = "select child_id from task_relation where parent_id in (?)"
+        cur = self._con.execute(query, (parent,))
+        yield from (task for (task,) in cur)
 
     def iter_all_tasks(self):
         """An iterator over all tasks in the db"""
@@ -151,8 +154,17 @@ class ReadConnection(ConnectionBase):
         tasks: Sequence[TaskID],
         *,
         sim_id: Optional[int] = None,
-    ) -> List[TaskSchedulingState]:
+    ):
         """Return 1 row per task scheduling state during the task's lifetime"""
+        return list(self.iter_task_scheduling_states(tasks, sim_id=sim_id))
+
+    def iter_task_scheduling_states(
+        self,
+        tasks: Sequence[TaskID],
+        *,
+        sim_id: Optional[int] = None,
+    ) -> Generator[TaskSchedulingState, None, None]:
+        """Yield 1 row per task scheduling state during the task's lifetime"""
 
         if sim_id is not None:
             query = scripts["get_simulated_scheduling_states"].format(
@@ -165,7 +177,7 @@ class ReadConnection(ConnectionBase):
             )
 
         cur = self._con.execute(query, tasks)
-        return [TaskSchedulingState(*row) for row in cur]
+        yield from (TaskSchedulingState(*row) for row in cur)
 
     def get_task_history(self, task: TaskID):
 
