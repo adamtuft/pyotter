@@ -25,6 +25,7 @@ class Summarise(str, Enum):
     TASKS = "tasks"
     STRINGS = "strings"
     SIMS = "sims"
+    PHASES = "phases"
 
 
 class GraphType(str, Enum):
@@ -345,6 +346,13 @@ def prepare_parser_plot(
         help="task whose descendants should be plotted",
         default=None,
         type=int,
+    )
+    parse_action_plot.add_argument(
+        "--no-format",
+        dest="format",
+        help="whether to format the plot according to in-built rules",
+        action="store_false",
+        default=True,
     )
     add_common_arguments(parse_action_plot)
 
