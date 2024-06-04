@@ -18,6 +18,9 @@ class ProjectBase(ABC, Loggable):
         aux_dir = self.project_root / "aux"
         maps_file = aux_dir / "maps"
 
+        if not self.project_root.is_dir():
+            self.log_error("project directory not found: %s", self.project_root)
+            raise NotADirectoryError(str(self.project_root))
         if not aux_dir.is_dir():
             self.log_error("directory not found: %s", aux_dir)
             raise NotADirectoryError(str(aux_dir))
