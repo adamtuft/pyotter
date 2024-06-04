@@ -1,9 +1,42 @@
+from typing import List
+
 import otter.log
 
+from otter.definitions import TaskAction
+from otter.db import ReadConnection
+from otter.db.types import TaskSchedulingState
 from otter.args import Summarise
 from otter.utils.demangle import demangle as demangle_tokens
 
 from .project import ReadTraceData
+
+
+def print_phase_scheduling_data(reader: ReadConnection):
+    phase_tasks = reader.get_children_of(reader.get_root_task())
+    phase_sched = reader.get_task_scheduling_states(phase_tasks)
+    for s in phase_sched:
+        if s.action_start == TaskAction.CREATE:
+            continue
+        if s.action_start == TaskAction.START:
+            print(f"  PHASE ID: {s.task:>8d} [label: {reader.get_task_label(s.task)}]")
+            print(
+                f"  {'TIME':<15s} | {' DURATION':<15s} | {' CHILDREN':<9s} | {' DESC.':<9s} | {' ACTION':<9s} | {' LOCATION':<14s}"
+            )
+            print("=" * 80)
+        children = reader.get_children_created_between(s.task, s.start_ts, s.end_ts)
+        num_children = len(children)
+        num_descendants = 0
+        for child, _ in children:
+            desc = reader.get_descendants_of(child)
+            num_descendants += len(desc)
+        print(
+            f"{s.start_ts:>17,d} | {s.duration:>15,d} | {num_children:>9,d} | {num_descendants:>9,d} | {s.action_start.name:<9s} | {s.start_location}"
+        )
+        if s.action_end == TaskAction.END:
+            print(
+                f"{s.end_ts:>17,d} | {'-':>15s} | {'-':>9s} | {'-':>9s} | {s.action_end.name:<9s} | {s.end_location}"
+            )
+            print()
 
 
 def summarise_tasks_db(
@@ -44,6 +77,9 @@ def summarise_tasks_db(
         elif summarise == Summarise.SIMS:
             for sim_id, rows in con.count_simulation_rows():
                 print(sim_id, rows, sep="\t")
+
+        elif summarise == Summarise.PHASES:
+            print_phase_scheduling_data(otter.project.ReadTraceData(anchorfile).connect())
 
         else:
             otter.log.error("don't know how to summarise %s", summarise)
