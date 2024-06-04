@@ -1,7 +1,7 @@
 from typing import Optional, Callable, Mapping, Tuple, Any, List, Iterable
 from functools import partial, lru_cache
 from collections import Counter
-from itertools import count
+from itertools import count, chain
 
 import pandas as pd
 from matplotlib import pyplot as plt
@@ -157,7 +157,14 @@ def get_scheduling_states(reader: ReadConnection, task: TaskID):
 
 
 def plot_scheduling_data(
-    anchorfile: str, /, *, task: Optional[TaskID], title: Optional[str] = None
+    anchorfile: str,
+    /,
+    *,
+    task: Optional[TaskID],
+    title: Optional[str] = None,
+    do_format: bool = True,
+    y_extent=0.85,
+    y_bias=0.00,
 ):
     otter.log.info(f"plotting from anchorfile: {anchorfile}")
 
@@ -204,12 +211,14 @@ def plot_scheduling_data(
         scheduling_states = reader.get_task_scheduling_states(other_tasks)
     else:
         otter.log.warning(f"get task scheduling states in batches of {MAX_QUERY_PARAMS})")
-        scheduling_states = []
+        scheduling_batches: List[List[TaskSchedulingState]] = []
         num_batches = 0
         for n, batch in enumerate(batched(other_tasks, batch_size=MAX_QUERY_PARAMS), start=1):
             otter.log.warning(f"... prepare batch {n}")
-            scheduling_states.extend(reader.get_task_scheduling_states(list(batch)))
+            scheduling_batches.append(reader.get_task_scheduling_states(list(batch)))
             num_batches += 1
+        otter.log.warning(f"flatten {len(other_tasks)} tasks into a single list")
+        scheduling_states = list(chain(*scheduling_batches))
         otter.log.warning(f"got all {len(other_tasks)} tasks in {num_batches} batches")
     data_getter = partial(
         get_state_plotting_data, reader=reader, pred=is_critical_task, get_colour=get_colour
@@ -227,7 +236,7 @@ def plot_scheduling_data(
     ykeys.sort()
     ymax = len(ykeys)
 
-    otter.log.debug("plot data")
+    otter.log.debug("add data to figure")
 
     # plot the phase data
     if phase_sched_df.empty:
@@ -248,13 +257,26 @@ def plot_scheduling_data(
         rows = state_df[state_df["ykey"] == ykey]
         ax.broken_barh(
             xranges=rows["xrange"],
-            yrange=(ytick + 0.075, 0.85),
+            yrange=(ytick + ((1 - y_extent) / 2) + y_bias, y_extent),
             facecolors=rows["facecolor"],
             edgecolor=rows["edgecolor"],
             alpha=rows["alpha"],
         )
         crt_rows = task_crt_df[task_crt_df["ykey"] == ykey]
-        ax.plot(crt_rows["x"], [ytick + 0.5] * len(crt_rows.index), "k.")
+        ax.plot(crt_rows["x"], [ytick + 0.5 + y_bias] * len(crt_rows.index), "k.")
+
+    if not do_format:
+        otter.log.debug("not formatting")
+        return (
+            plt.show,
+            fig,
+            ax,
+            ykeys,
+            (scheduling_states, state_df),
+            (phase_sched, phase_sched_df),
+        )
+
+    otter.log.debug("formatting figure")
 
     ax.set_yticks([x + 0.5 for x in range(len(ykeys))])
     ylabel_depth = set(map(len, ykeys))
