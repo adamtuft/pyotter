@@ -63,7 +63,12 @@ def _select_action(args) -> None:
         elif args.action == Action.SIMULATE:
             otter.project.simulate_schedule(args.anchorfile)
         elif args.action == Action.PLOT:
-            otter.project.plot_scheduling_data(args.anchorfile, title=args.title, task=args.task)
+            result = otter.project.plot_scheduling_data(
+                args.anchorfile, title=args.title, task=args.task, do_format=args.format
+            )
+            if result:
+                show, *_ = result
+                show()
         else:
             print(f"unknown action: {args.action}")
             otter.args.print_help()
